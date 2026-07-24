@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Project specific
+backend/data/
+backend/db/
+backend/certs/
+backend/.DS_Store
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

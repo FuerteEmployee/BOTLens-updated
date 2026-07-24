@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: botlens
+    env: docker
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATABASE_DIR
+        value: /app/backend/data/db
+      - key: PHOTO_DIR
+        value: /app/backend/data/photos
+    disk:
+      name: botlens-data
+      mountPath: /app/backend/data
+      sizeGB: 1

@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+opencv-contrib-python-headless
+numpy
+python-multipart
+requests
+psycopg2-binary
+python-dotenv
