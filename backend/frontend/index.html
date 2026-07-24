@@ -1263,12 +1263,11 @@
             </div>
             <button class="menu-trigger" onclick="toggleSidebar()" style="display: block;">✕</button>
         </div>
-        <!-- <div class="sidebar-nav">
+        <div class="sidebar-nav">
             <button class="tab-btn active" id="mob-tab-live" onclick="showTab('live', startLive)">📡 Live View</button>
             <button class="tab-btn" id="mob-tab-add" onclick="confirmAndShowEditEmployees()">👤 Edit Employees</button>
-            <button class="tab-btn" onclick="downloadApp()" style="margin-top:auto;">⬇️ Download</button>
-            <button class="tab-btn" onclick="logout()" style="color:var(--danger);">🚪 Logout</button>
-        </div> -->
+            <button class="tab-btn" onclick="logout()" style="margin-top:auto; color:var(--danger);">🚪 Logout</button>
+        </div>
     </div>
 
     <nav>
@@ -1279,18 +1278,17 @@
             <span style="font-weight:800; font-size:1.4rem; letter-spacing:-1px;">BOT<span
                     style="color:var(--accent);">Lens</span></span>
         </div>
-        <div class="tabs">
-            <button class="tab-btn active" id="tab-live" onclick="showTab('live', startLive)">Live View</button>
-            <button class="tab-btn" id="tab-add" onclick="confirmAndShowEditEmployees()">Edit Employees</button>
-        </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-            <button class="btn-sub" onclick="downloadApp()"
-                style="background:transparent; border:1px solid var(--accent); color:var(--accent); font-weight:700;">⬇️
-                Download</button>
-            <button class="btn-sub" onclick="logout()"
-                style="background:transparent; border:1px solid var(--danger); color:var(--danger); font-weight:700;">🚪
-                Logout</button>
-            <button class="menu-trigger" onclick="toggleSidebar()">☰</button>
+        <div style="display:flex; align-items:center; gap:24px;">
+            <div class="tabs">
+                <button class="tab-btn active" id="tab-live" onclick="showTab('live', startLive)">Live View</button>
+                <button class="tab-btn" id="tab-add" onclick="confirmAndShowEditEmployees()">Edit Employees</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <button class="btn-sub" onclick="logout()"
+                    style="background:transparent; border:1px solid var(--danger); color:var(--danger); font-weight:700;">🚪
+                    Logout</button>
+                <button class="menu-trigger" onclick="toggleSidebar()">☰</button>
+            </div>
         </div>
     </nav>
 
@@ -2573,30 +2571,6 @@
             deferredPrompt = e;
             maybeShowInstallToast();
         });
-
-        // Manual fallback for the "⬇️ Download" nav button — the browser only
-        // fires beforeinstallprompt on its own schedule (and never at all on
-        // iOS Safari, or once the app is already installed), so this can't
-        // just re-run maybeShowInstallToast(). It handles all three cases:
-        // prompt ready, already installed, or prompt not available yet.
-        function downloadApp() {
-            const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-                || window.navigator.standalone === true;
-            if (isStandalone) {
-                toast('BOTLens is already installed on this device.');
-                return;
-            }
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
-                return;
-            }
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-            toast(isIOS
-                ? 'To install: tap the Share icon, then "Add to Home Screen".'
-                : 'Install prompt isn\'t available yet. Open your browser menu and choose "Install app" / "Add to Home Screen".',
-                true);
-        }
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
