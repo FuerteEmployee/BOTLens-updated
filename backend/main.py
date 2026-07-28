@@ -137,8 +137,11 @@ async def add_employee(
     return {"id": emp.id}
 
 @app.get("/api/employees")
-def get_employees(db: Session = Depends(get_db)):
-    emps = db.query(Employee).filter(Employee.is_active == 1).all()
+def get_employees(external_admin_id: str = None, db: Session = Depends(get_db)):
+    query = db.query(Employee).filter(Employee.is_active == 1)
+    if external_admin_id:
+        query = query.filter(Employee.external_admin_id == external_admin_id)
+    emps = query.all()
     return [{
         "id": e.id, "name": e.name, "phone": e.phone, "photo_path": e.photo_path, "photo_url": photo_url(e.photo_path),
         "monthly_salary": e.monthly_salary, "hourly_rate": e.hourly_rate,
@@ -225,10 +228,12 @@ async def delete_employee(emp_id: int, db: Session = Depends(get_db)):
     return {"success": True}
 
 @app.get("/api/history")
-def get_history(emp_id: int = None, date_str: str = None, db: Session = Depends(get_db)):
+def get_history(emp_id: int = None, date_str: str = None, external_admin_id: str = None, db: Session = Depends(get_db)):
     query = db.query(AttendanceLog).join(Employee).filter(Employee.is_active == 1)
     if emp_id:
         query = query.filter(AttendanceLog.employee_id == emp_id)
+    if external_admin_id:
+        query = query.filter(Employee.external_admin_id == external_admin_id)
     if date_str:
         # date format: YYYY-MM-DD
         from datetime import datetime
@@ -240,8 +245,11 @@ def get_history(emp_id: int = None, date_str: str = None, db: Session = Depends(
     return [{"id": l.id, "employee_name": l.employee.name if l.employee else "Unknown", "action": l.action, "reason": l.reason, "timestamp": l.timestamp.strftime("%Y-%m-%d %H:%M:%S")} for l in logs]
 
 @app.get("/api/stats")
-def get_stats(db: Session = Depends(get_db)):
-    stats = db.query(ActivityStats).join(Employee).filter(Employee.is_active == 1).order_by(ActivityStats.date.desc()).all()
+def get_stats(external_admin_id: str = None, db: Session = Depends(get_db)):
+    query = db.query(ActivityStats).join(Employee).filter(Employee.is_active == 1)
+    if external_admin_id:
+        query = query.filter(Employee.external_admin_id == external_admin_id)
+    stats = query.order_by(ActivityStats.date.desc()).all()
     res = []
     for s in stats:
         h_w, m_w, s_w = s.work_seconds // 3600, (s.work_seconds % 3600) // 60, s.work_seconds % 60

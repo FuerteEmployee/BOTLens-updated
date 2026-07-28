@@ -1778,7 +1778,8 @@
             const session = getSession();
 
             try {
-                const localRes = await fetch('/api/employees', { cache: 'no-store' });
+                const q = session?.adminId ? `?external_admin_id=${encodeURIComponent(session.adminId)}` : '';
+                const localRes = await fetch('/api/employees' + q, { cache: 'no-store' });
                 editEmployees = await localRes.json();
             } catch (err) {
                 editEmployees = [];
@@ -2445,7 +2446,9 @@
             const g = document.getElementById('active-grid');
             if (!g) return;
 
-            const res = await fetch('/api/history', { cache: 'no-store' });
+            const session = getSession();
+            const q = session?.adminId ? `?external_admin_id=${encodeURIComponent(session.adminId)}` : '';
+            const res = await fetch('/api/history' + q, { cache: 'no-store' });
             const data = await res.json();
 
             if (data.length > 0) {
