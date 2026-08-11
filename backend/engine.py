@@ -2,6 +2,7 @@ import cv2
 import json
 import time
 import os
+import shutil
 import threading
 import queue
 import requests
@@ -27,12 +28,19 @@ def _sync_worker():
     while True:
         admin_id, employee_id, action = _sync_queue.get()
         try:
-            requests.post(
+            resp = requests.post(
                 f"{NODE_API_URL}/api/device/attendance/punch",
                 json={"adminId": admin_id, "employeeId": employee_id, "action": action},
                 headers={"Authorization": f"Bearer {NODE_CAMERA_API_KEY}"},
                 timeout=5,
             )
+            # requests only raises on connection-level failures, not on 4xx/5xx —
+            # without this, Node rejecting the punch (bad key, adminId mismatch,
+            # unknown employee, ...) was silently discarded and never logged, so
+            # a punch could show as successful in BOTLens's UI while never
+            # reaching Node's attendance records at all.
+            if not resp.ok:
+                print(f"--- NODE SYNC REJECTED ({resp.status_code}) for employee {employee_id}: {resp.text[:300]} ---")
         except Exception as e:
             print(f"--- NODE SYNC ERROR: {str(e)} ---")
         finally:
@@ -124,6 +132,175 @@ def train_recognizer(db: Session):
     print(f"--- Loaded encodings for {len(known_face_encodings)} employees ---")
     return True
 
+def purge_employee(db: Session, emp: Employee):
+    """Hard-delete an employee: face photos, encoding, attendance history and
+    the row itself. Anything less leaves a recognizable face on disk that can
+    still be matched and punched in against."""
+    global known_face_encodings, presence_state
+    if emp.photo_path:
+        target_dir = os.path.dirname(emp.photo_path)
+        if os.path.isdir(target_dir) and "data/photos" in target_dir:
+            shutil.rmtree(target_dir, ignore_errors=True)
+    emp_id = emp.id
+    db.query(AttendanceLog).filter(AttendanceLog.employee_id == emp_id).delete()
+    db.query(ActivityStats).filter(ActivityStats.employee_id == emp_id).delete()
+    db.delete(emp)
+    db.commit()
+    known_face_encodings.pop(emp_id, None)
+    presence_state.pop(emp_id, None)
+
+def reconcile_employees_with_node(db: Session):
+    """Catches deletions that happen on the Node/HRMS side (admin panel)
+    instead of through BOTLens's own UI. Node calls BOTLens directly on
+    delete (see purgeFromBotlens in user_controller.js), but that's
+    best-effort — if it fails (BOTLens briefly down, network hiccup) the
+    employee would otherwise keep recognizing forever. This periodic sweep
+    is the backstop: any BOTLens employee linked to a Node admin whose
+    account no longer lists them gets purged too."""
+    if not NODE_API_URL or not NODE_CAMERA_API_KEY:
+        return
+    admin_ids = {
+        e.external_admin_id for e in
+        db.query(Employee).filter(Employee.external_admin_id != "").all()
+    }
+    for admin_id in admin_ids:
+        try:
+            resp = requests.get(
+                f"{NODE_API_URL}/api/device/attendance/employees",
+                params={"adminId": admin_id},
+                headers={"Authorization": f"Bearer {NODE_CAMERA_API_KEY}"},
+                timeout=5,
+            )
+            resp.raise_for_status()
+            valid_ids = set(resp.json().get("employeeIds", []))
+        except Exception as e:
+            # Can't confirm the current roster — don't purge anyone on a guess.
+            print(f"--- NODE RECONCILE ERROR: {str(e)} ---")
+            continue
+
+        stale = db.query(Employee).filter(
+            Employee.external_admin_id == admin_id,
+            Employee.external_user_id != "",
+            ~Employee.external_user_id.in_(valid_ids)
+        ).all()
+        for emp in stale:
+            print(f"--- Purging '{emp.name}' (id={emp.id}): no longer active on Node ---")
+            purge_employee(db, emp)
+
+# Node is the source of truth for face data — a face registered on any one
+# BOTLens camera should be recognizable on every camera for that tenant.
+# These two functions are the sync in each direction.
+
+def push_face_to_node(admin_id: str, external_user_id: str, face_encoding_json: str, photo_path: str = None):
+    """Best-effort push of a just-registered/edited face up to Node, right
+    after it's saved locally. Never raises — a failed push just means this
+    face stays local-only until the next successful push or manual retry.
+
+    The local photo_path is a file on THIS machine's disk and means nothing
+    anywhere else, so the actual image bytes travel as a base64 data URL —
+    Node uploads them to Cloudinary (same as every other photo upload in
+    that backend) and stores the resulting public URL, which any camera can
+    then download from."""
+    if not NODE_API_URL or not NODE_CAMERA_API_KEY or not admin_id or not external_user_id:
+        return
+    photo_data_url = None
+    if photo_path and os.path.exists(photo_path):
+        try:
+            import base64
+            with open(photo_path, "rb") as f:
+                photo_data_url = f"data:image/jpeg;base64,{base64.b64encode(f.read()).decode('ascii')}"
+        except Exception as e:
+            print(f"--- NODE FACE PUSH: couldn't read {photo_path}: {str(e)} ---")
+    try:
+        resp = requests.put(
+            f"{NODE_API_URL}/api/device/attendance/employees/{external_user_id}/face",
+            json={"adminId": admin_id, "faceEncoding": face_encoding_json, "photo": photo_data_url},
+            headers={"Authorization": f"Bearer {NODE_CAMERA_API_KEY}"},
+            timeout=15,
+        )
+        if not resp.ok:
+            print(f"--- NODE FACE PUSH REJECTED ({resp.status_code}) for {external_user_id}: {resp.text[:300]} ---")
+    except Exception as e:
+        print(f"--- NODE FACE PUSH ERROR: {str(e)} ---")
+
+PHOTO_DIR = os.getenv("PHOTO_DIR", "data/photos")
+
+def _download_face_photo(name: str, url: str):
+    """Saves Node's Cloudinary-hosted photo locally too, so the Edit
+    Employees screen has an actual image to show — not strictly needed for
+    recognition (the encoding alone is enough for train_recognizer's DB
+    fallback), but "no photo at all" reads as broken even when it isn't."""
+    if not url:
+        return None
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        folder = os.path.join(PHOTO_DIR, f"{name.replace(' ', '_')}_{int(time.time())}")
+        os.makedirs(folder, exist_ok=True)
+        dest = os.path.join(folder, "face_0.jpg")
+        with open(dest, "wb") as f:
+            f.write(resp.content)
+        return dest
+    except Exception as e:
+        print(f"--- FACE PHOTO DOWNLOAD ERROR for {name}: {str(e)} ---")
+        return None
+
+def sync_employees_from_node(db: Session, admin_id: str) -> dict:
+    """Pulls every employee already registered with a face — on this camera
+    or any other — for this admin, and upserts them into the local store.
+    Called when an admin logs into BOTLens, so a fresh (or second) camera
+    immediately recognizes everyone already registered elsewhere, instead of
+    needing every employee re-captured on every physical camera."""
+    if not NODE_API_URL or not NODE_CAMERA_API_KEY or not admin_id:
+        return {"created": 0, "updated": 0, "error": "NODE_API_URL/NODE_CAMERA_API_KEY not configured"}
+
+    resp = requests.get(
+        f"{NODE_API_URL}/api/device/attendance/employees/faces",
+        params={"adminId": admin_id},
+        headers={"Authorization": f"Bearer {NODE_CAMERA_API_KEY}"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    remote_employees = resp.json().get("employees", [])
+
+    created, updated = 0, 0
+    for remote in remote_employees:
+        external_user_id = remote.get("_id")
+        if not external_user_id:
+            continue
+        local = db.query(Employee).filter(
+            Employee.external_admin_id == admin_id,
+            Employee.external_user_id == external_user_id
+        ).first()
+
+        if local:
+            changed = False
+            if not local.face_encoding and remote.get("faceEncoding"):
+                local.face_encoding = remote["faceEncoding"]
+                local.is_active = True
+                changed = True
+            if not local.photo_path and remote.get("facePhotoUrl"):
+                local.photo_path = _download_face_photo(remote["name"], remote["facePhotoUrl"])
+                changed = True
+            if changed:
+                updated += 1
+        else:
+            db.add(Employee(
+                name=remote.get("name", "Unknown"),
+                phone=remote.get("phone", ""),
+                photo_path=_download_face_photo(remote.get("name", "Unknown"), remote.get("facePhotoUrl")),
+                face_encoding=remote.get("faceEncoding"),
+                is_active=True,
+                external_admin_id=admin_id,
+                external_user_id=external_user_id,
+            ))
+            created += 1
+
+    db.commit()
+    if created or updated:
+        trigger_retrain()
+    return {"created": created, "updated": updated}
+
 def encode_face(image_path: str):
     if not os.path.exists(image_path): return None
     img = cv2.imread(image_path)
@@ -213,7 +390,8 @@ def process_frame(frame, db: Session, detections_list=None, recognition=True):
     current_time = time.time()
     
     # 0. Periodic Retrain OR Manual Trigger
-    if needs_retrain or current_time - last_recognition_time > 300: 
+    if needs_retrain or current_time - last_recognition_time > 300:
+        reconcile_employees_with_node(db)
         train_recognizer(db)
         last_recognition_time = current_time
 

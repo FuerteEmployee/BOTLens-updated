@@ -1532,7 +1532,7 @@
                     style="display:none; color:var(--danger); font-size:0.85rem; margin-bottom:15px;"></p>
                 <div style="display:flex; gap:10px;">
                     <button type="button" class="btn-sub" style="flex:1;"
-                        onclick="document.getElementById('add-employee-auth-modal').style.display='none';">Cancel</button>
+                        onclick="cancelAddEmployeeAuth();">Cancel</button>
                     <button type="submit" class="btn-main" id="add-auth-submit-btn" style="flex:2;">Confirm &
                         Continue</button>
                 </div>
@@ -2296,7 +2296,15 @@
                 const res = await fetch(url, { method, body: fd });
                 const data = await res.json();
                 if (res.ok && !data.error) {
-                    if (!hasLocalRecord) await linkLocalEmployeeToHrms(data.id, nodeId, name);
+                    if (!hasLocalRecord) {
+                        const linked = await linkLocalEmployeeToHrms(data.id, nodeId, name);
+                        if (!linked) {
+                            toast('Face saved, but linking to HRMS failed — punches from this camera will NOT sync to the admin panel. Please try saving this employee again.', true);
+                            await loadEditEmployeesTab();
+                            btn.disabled = false; btn.textContent = 'Save Employee';
+                            return;
+                        }
+                    }
                     toast('Employee Updated!');
                     await loadEditEmployeesTab();
                 } else {
@@ -2316,13 +2324,23 @@
             const session = getSession();
             if (!session?.adminId) {
                 toast('Saved locally, but could not link to HRMS — please log out and back in, then try again.', true);
-                return;
+                return false;
             }
             const linkFd = new FormData();
             linkFd.append('name', name);
             linkFd.append('external_admin_id', session.adminId);
             linkFd.append('external_user_id', nodeId);
-            await fetch('/api/employees/' + localId, { method: 'PUT', body: linkFd });
+            try {
+                const res = await fetch('/api/employees/' + localId, { method: 'PUT', body: linkFd });
+                if (!res.ok) {
+                    console.error('Link to HRMS failed:', res.status, await res.text().catch(() => ''));
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                console.error('Link to HRMS error:', err);
+                return false;
+            }
         }
 
         function confirmAndShowEditEmployees() {
@@ -2343,6 +2361,16 @@
             document.getElementById('add-auth-error').style.display = 'none';
             document.getElementById('add-employee-auth-modal').style.display = 'flex';
             setTimeout(() => document.getElementById('add-auth-email').focus(), 50);
+        }
+
+        // Cancelling the identity check must not leave Edit Employees visible —
+        // confirmAndShowEditEmployees() switches to that tab BEFORE the modal
+        // even opens (to kill the camera loop), so hiding the modal alone left
+        // the fully interactive Edit Employees screen exposed underneath with
+        // no email/password ever having been verified.
+        function cancelAddEmployeeAuth() {
+            document.getElementById('add-employee-auth-modal').style.display = 'none';
+            showTab('live', startLive);
         }
 
         async function submitAddEmployeeAuth(e) {
@@ -2490,7 +2518,7 @@
                     li.innerHTML = `
                         <span><strong>${l.employee_name}</strong></span>
                         <span style="color:${color}; font-weight:700;">${l.action.replace('_', ' ')}</span>
-                        <span style="opacity:0.6;">${l.timestamp.split(' ')[1]}</span>
+                        <span style="opacity:0.6;">${new Date(l.timestamp).toLocaleTimeString()}</span>
                     `;
                     logList.appendChild(li);
                 });
@@ -2544,6 +2572,30 @@
 
             checkSubscriptionStatus();
             setInterval(checkSubscriptionStatus, 60000);
+
+            syncEmployeesFromNode();
+        }
+
+        // Node is the source of truth for face data — pulls in every employee
+        // already registered with a face on ANY camera for this admin, so this
+        // one recognizes them too without needing them re-captured here.
+        // Fire-and-forget: a failed sync just means this camera stays as it
+        // was until the next successful login.
+        async function syncEmployeesFromNode() {
+            const session = getSession();
+            if (!session?.adminId) return;
+            try {
+                const fd = new FormData();
+                fd.append('external_admin_id', session.adminId);
+                const res = await fetch('/api/employees/sync_from_node', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (data.error) { console.warn('Employee sync from Node skipped:', data.error); return; }
+                if (data.created || data.updated) {
+                    console.log(`Synced from Node: ${data.created} new, ${data.updated} updated`);
+                }
+            } catch (err) {
+                console.warn('Employee sync from Node failed:', err);
+            }
         }
 
         // PWA Installation Logic — the browser fires beforeinstallprompt on its

@@ -6,13 +6,13 @@ import json
 import time
 import numpy as np
 import base64
-from fastapi import FastAPI, Depends, File, UploadFile, Form, BackgroundTasks
+from fastapi import FastAPI, Depends, File, UploadFile, Form, BackgroundTasks, Request, HTTPException
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 from models import Employee, AttendanceLog, ActivityStats
-from engine import process_frame, encode_face, trigger_retrain
+from engine import process_frame, encode_face, trigger_retrain, purge_employee, push_face_to_node, sync_employees_from_node
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse, FileResponse
 import uvicorn
@@ -134,6 +134,9 @@ async def add_employee(
     )
     db.add(emp); db.commit(); db.refresh(emp)
     trigger_retrain()
+    # Node uploads the photo bytes to Cloudinary and stores the resulting
+    # public URL — so any camera can later download and show it too.
+    push_face_to_node(external_admin_id, external_user_id, emp.face_encoding, emp.photo_path)
     return {"id": emp.id}
 
 @app.get("/api/employees")
@@ -148,6 +151,19 @@ def get_employees(external_admin_id: str = None, db: Session = Depends(get_db)):
         "bank_name": e.bank_name, "bank_account": e.bank_account, "bank_ifsc": e.bank_ifsc,
         "external_admin_id": e.external_admin_id, "external_user_id": e.external_user_id
     } for e in emps]
+
+@app.post("/api/employees/sync_from_node")
+async def sync_from_node(external_admin_id: str = Form(...), db: Session = Depends(get_db)):
+    # Pulls every employee already face-registered for this admin — on this
+    # camera or any other — from Node's shared collection. Called by the
+    # frontend right after login, so a fresh or second camera immediately
+    # recognizes everyone already registered elsewhere instead of needing
+    # them re-captured on every physical camera.
+    try:
+        result = sync_employees_from_node(db, external_admin_id)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.put("/api/employees/{emp_id}")
 async def update_employee(
@@ -216,14 +232,36 @@ async def update_employee(
 
         db.commit()
         trigger_retrain()
+        if emp.face_encoding:
+            push_face_to_node(emp.external_admin_id, emp.external_user_id, emp.face_encoding, emp.photo_path)
     return {"success": True}
 
 @app.delete("/api/employees/{emp_id}")
 async def delete_employee(emp_id: int, db: Session = Depends(get_db)):
     emp = db.query(Employee).filter(Employee.id == emp_id).first()
-    if emp: 
-        emp.is_active = 0
-        db.commit()
+    if emp:
+        purge_employee(db, emp)
+        trigger_retrain()
+    return {"success": True}
+
+def _check_camera_api_key(request: Request):
+    api_key = os.getenv("NODE_CAMERA_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="NODE_CAMERA_API_KEY is not configured on this server")
+    auth = request.headers.get("authorization", "")
+    provided = auth[7:] if auth.startswith("Bearer ") else request.headers.get("x-camera-api-key")
+    if provided != api_key:
+        raise HTTPException(status_code=401, detail="Invalid camera API key")
+
+@app.delete("/api/employees/external/{external_user_id}")
+async def delete_employee_by_external_id(external_user_id: str, request: Request, db: Session = Depends(get_db)):
+    # Called by the Node/HRMS backend right after it deletes an employee, so
+    # BOTLens purges the matching face data immediately instead of waiting
+    # for the next periodic reconcile (see reconcile_employees_with_node).
+    _check_camera_api_key(request)
+    emp = db.query(Employee).filter(Employee.external_user_id == external_user_id).first()
+    if emp:
+        purge_employee(db, emp)
         trigger_retrain()
     return {"success": True}
 
@@ -242,7 +280,7 @@ def get_history(emp_id: int = None, date_str: str = None, external_admin_id: str
         query = query.filter(AttendanceLog.timestamp >= start_date, AttendanceLog.timestamp <= end_date)
     
     logs = query.order_by(AttendanceLog.timestamp.asc()).all()
-    return [{"id": l.id, "employee_name": l.employee.name if l.employee else "Unknown", "action": l.action, "reason": l.reason, "timestamp": l.timestamp.strftime("%Y-%m-%d %H:%M:%S")} for l in logs]
+    return [{"id": l.id, "employee_name": l.employee.name if l.employee else "Unknown", "action": l.action, "reason": l.reason, "timestamp": l.timestamp.strftime("%Y-%m-%dT%H:%M:%S") + "Z"} for l in logs]
 
 @app.get("/api/stats")
 def get_stats(external_admin_id: str = None, db: Session = Depends(get_db)):
