@@ -3,6 +3,13 @@ from sqlalchemy.orm import relationship
 from database import Base
 import datetime
 
+def ist_now():
+    # Stored naive (no tzinfo) but in IST, not UTC — every place that reads
+    # AttendanceLog.timestamp (the frontend's raw display, engine.py's
+    # date.today() "today" comparisons) already assumes the value is already
+    # in local time, with no timezone conversion applied anywhere.
+    return datetime.datetime.utcnow() + datetime.timedelta(hours=5, minutes=30)
+
 class Employee(Base):
     __tablename__ = "employees"
     id = Column(Integer, primary_key=True, index=True)
@@ -31,7 +38,7 @@ class AttendanceLog(Base):
     employee_id = Column(Integer, ForeignKey("employees.id"))
     action = Column(String)  # 'PUNCH_IN', 'PUNCH_OUT', 'ACTIVITY_UPDATE'
     reason = Column(String)  # 'FACE_MATCH', 'LEFT_DESK', 'PHONE_DETECTED', 'LAPTOP_DETECTED'
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=ist_now)
     
     employee = relationship("Employee")
 

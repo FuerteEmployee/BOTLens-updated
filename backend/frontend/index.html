@@ -1532,7 +1532,7 @@
                     style="display:none; color:var(--danger); font-size:0.85rem; margin-bottom:15px;"></p>
                 <div style="display:flex; gap:10px;">
                     <button type="button" class="btn-sub" style="flex:1;"
-                        onclick="document.getElementById('add-employee-auth-modal').style.display='none';">Cancel</button>
+                        onclick="cancelAddEmployeeAuth();">Cancel</button>
                     <button type="submit" class="btn-main" id="add-auth-submit-btn" style="flex:2;">Confirm &
                         Continue</button>
                 </div>
@@ -2345,6 +2345,16 @@
             setTimeout(() => document.getElementById('add-auth-email').focus(), 50);
         }
 
+        // Cancelling the identity check must not leave Edit Employees visible —
+        // confirmAndShowEditEmployees() switches to that tab BEFORE the modal
+        // even opens (to kill the camera loop), so hiding the modal alone left
+        // the fully interactive Edit Employees screen exposed underneath with
+        // no email/password ever having been verified.
+        function cancelAddEmployeeAuth() {
+            document.getElementById('add-employee-auth-modal').style.display = 'none';
+            showTab('live', startLive);
+        }
+
         async function submitAddEmployeeAuth(e) {
             e.preventDefault();
             const email = document.getElementById('add-auth-email').value.trim();
@@ -2447,8 +2457,15 @@
             if (!g) return;
 
             const session = getSession();
-            const q = session?.adminId ? `?external_admin_id=${encodeURIComponent(session.adminId)}` : '';
-            const res = await fetch('/api/history' + q, { cache: 'no-store' });
+            // Scope to today only — an employee who punched in yesterday and
+            // never punched out (forgot, mis-recognized, etc.) would otherwise
+            // show as still "PUNCHED IN" on the live grid forever, since this
+            // takes the last-known action per employee across all of history.
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            const params = new URLSearchParams({ date_str: todayStr });
+            if (session?.adminId) params.set('external_admin_id', session.adminId);
+            const res = await fetch('/api/history?' + params.toString(), { cache: 'no-store' });
             const data = await res.json();
 
             if (data.length > 0) {
