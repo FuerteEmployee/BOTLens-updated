@@ -1,4 +1,4 @@
-const CACHE_NAME = 'botlens-cache-v4';
+const CACHE_NAME = 'botlens-cache-v5';
 const ASSETS = [
   '/static/icon.png',
   '/static/icon-192.png',
@@ -25,7 +25,9 @@ self.addEventListener('fetch', (event) => {
   // only the offline fallback uses the cache. Static assets stay cache-first.
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
+      fetch(event.request).catch(async () => (await caches.match(event.request)) ||
+        new Response('<h2 style="font-family:sans-serif;padding:24px">BOTLens: no connection. It will reload when the internet is back.</h2><script>setTimeout(()=>location.reload(),10000)</script>',
+          { status: 503, headers: { 'Content-Type': 'text/html' } }))
     );
     return;
   }

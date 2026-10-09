@@ -1227,6 +1227,20 @@
                     </div>
                 </form>
 
+                <form id="login-kiosk-form" style="display:none;">
+                    <label class="login-otp-label">Name this kiosk</label>
+                    <div class="login-phone-wrap" style="margin-bottom:12px;">
+                        <span class="login-phone-prefix">📍</span>
+                        <input id="login-kiosk-name" class="login-phone-input" type="text" maxlength="60"
+                            placeholder="Reception" value="Reception" autocomplete="off">
+                    </div>
+                    <p class="login-trust-line" style="margin-bottom:18px;">This device gets its own kiosk key. It can
+                        record faces and register them, but cannot open your admin panel. You can switch it off any time
+                        from Biometric devices in the admin panel.</p>
+                    <button type="submit" class="login-btn" id="login-kiosk-btn"><span
+                            id="login-kiosk-btn-label">Set up this kiosk</span></button>
+                </form>
+
                 <p class="login-copyright">© 2026 Be On Time (BOT) Platform</p>
             </div>
         </div>
@@ -1265,7 +1279,7 @@
         </div>
         <div class="sidebar-nav">
             <button class="tab-btn active" id="mob-tab-live" onclick="showTab('live', startLive)">📡 Live View</button>
-            <button class="tab-btn" id="mob-tab-add" onclick="confirmAndShowEditEmployees()">👤 Edit Employees</button>
+            <button class="tab-btn" id="mob-tab-add" onclick="confirmAndShowEditEmployees()">👤 Register Faces</button>
             <button class="tab-btn" onclick="logout()" style="margin-top:auto; color:var(--danger);">🚪 Logout</button>
         </div>
     </div>
@@ -1281,7 +1295,7 @@
         <div style="display:flex; align-items:center; gap:24px;">
             <div class="tabs">
                 <button class="tab-btn active" id="tab-live" onclick="showTab('live', startLive)">Live View</button>
-                <button class="tab-btn" id="tab-add" onclick="confirmAndShowEditEmployees()">Edit Employees</button>
+                <button class="tab-btn" id="tab-add" onclick="confirmAndShowEditEmployees()">Register Faces</button>
             </div>
             <div style="display:flex; align-items:center; gap:10px;">
                 <button class="btn-sub" onclick="logout()"
@@ -1344,7 +1358,7 @@
             </div>
             <div style="margin-top: 30px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                    <h3>Real-Time Attendance Log</h3>
+                    <h3>On duty now (seen by this kiosk)</h3>
                     <button class="btn-sub"
                         onclick="document.getElementById('camera-troubleshoot').style.display='block'"
                         style="font-size:0.7rem; opacity:0.7;">Camera Issues?</button>
@@ -1366,7 +1380,7 @@
         <!-- Add Employee -->
         <div id="view-add" class="tab-content">
             <div class="glass-form">
-                <h2 class="mb-4">Edit Employees</h2>
+                <h2 class="mb-4">Register Faces</h2>
                 <form id="add-form">
                     <div class="form-row">
                         <div class="form-group">
@@ -1375,57 +1389,19 @@
                                 <option value="" disabled selected>Select an employee</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Phone Number</label>
-                            <input type="tel" id="add-phone" class="inp" readonly placeholder="—">
-                        </div>
                     </div>
 
                     <div id="emp-details-fields" style="display:none;">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Salary Type</label>
-                            <select id="add-sal-type" class="inp" onchange="toggleSalFields('add')">
-                                <option value="monthly">Monthly Salary</option>
-                                <option value="hourly">Hourly Rate</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="add-monthly-group">
-                            <label>Monthly Salary (₹)</label>
-                            <input type="number" id="add-monthly" class="inp" value="0">
-                        </div>
-                        <div class="form-group" id="add-hourly-group" style="display:none;">
-                            <label>Hourly Rate (₹)</label>
-                            <input type="number" id="add-hourly" class="inp" value="0">
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Bank Name</label>
-                            <input type="text" id="add-bank" class="inp" placeholder="HDFC, SBI, etc.">
-                        </div>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Account Number</label>
-                            <input type="text" id="add-acc" class="inp" placeholder="000000000000">
-                        </div>
-                        <div class="form-group">
-                            <label>IFSC Code</label>
-                            <input type="text" id="add-ifsc" class="inp" placeholder="HDFC0001234">
-                        </div>
-                    </div>
-
                     <div class="form-group">
-                        <label>Identity Photo Source</label>
+                        <label>Face</label>
 
                         <div id="current-photo-block" style="display:none; margin-bottom:20px; text-align:center;">
                             <img id="current-photo-img" alt="Employee photo"
                                 onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 150 150%22><rect width=%22150%22 height=%22150%22 fill=%22%23374151%22/><text x=%2275%22 y=%2285%22 font-size=%2260%22 text-anchor=%22middle%22 fill=%22%239ca3af%22 font-family=%22sans-serif%22>?</text></svg>';"
                                 style="width:150px; height:150px; object-fit:cover; border-radius:50%; border:2px solid var(--glass-border); display:block; margin: 0 auto 15px auto; background:#374151;">
-                            <button type="button" class="btn-sub" onclick="startPhotoChange()">🔁 Change Photo</button>
+                            <p id="current-photo-note" style="color:var(--text-sub); font-size:0.8rem; margin-bottom:12px;"></p>
+                            <button type="button" class="btn-sub" onclick="startPhotoChange()">🔁 Scan again</button>
+                            <button type="button" class="btn-sub" onclick="removeFace()" style="color:var(--danger); border-color:var(--danger);">🗑 Remove face</button>
                         </div>
 
                         <div id="photo-capture-block">
@@ -1505,7 +1481,7 @@
                         </div>
                     </div>
                     </div>
-                    <button type="submit" class="btn-main" id="btn-reg" disabled>Save Employee</button>
+                    <button type="submit" class="btn-main" id="btn-reg" disabled>Save Face</button>
                 </form>
             </div>
         </div>
@@ -1516,9 +1492,9 @@
     <div id="add-employee-auth-modal" class="modal">
         <div class="modal-content" style="max-width:420px;">
             <h2 class="mb-4">Confirm Admin Identity</h2>
-            <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:20px; line-height:1.5;">Editing
-                employees requires re-entering your admin email and password, so a borrowed or unattended session
-                can't be used to register a fraudulent face. You won't be asked again until you log out.</p>
+            <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:20px; line-height:1.5;">Registering
+                faces needs the BOTLens email and password, so nobody at an unattended kiosk can register their own
+                face as someone else. You will be asked again after 15 minutes.</p>
             <form id="add-auth-form" onsubmit="submitAddEmployeeAuth(event)">
                 <div class="form-group" style="margin-bottom:15px;">
                     <label>Email</label>
@@ -1543,15 +1519,65 @@
     </div>
 
     <script>
-        // ==== Login Gate (backed by the Node/HRMS user directory) ====
+        // ==== Kiosk sign-in ====
+        // An admin signs in ONCE on this device; the B.O.T server then gives the
+        // kiosk its own key (POST /api/lens/kiosks), which can only record faces
+        // and register them. The admin's own sign-in is used for that one call
+        // and never stored here, so an unattended tablet holds no admin access.
         const NODE_API_URL = (window.NODE_API_URL || "http://localhost:5000").replace(/\/$/, "");
-        const SESSION_KEY = "botlens_admin_session";
+        const SESSION_KEY = "botlens_kiosk";
+        // The old kiosk kept the admin's full 30-day sign-in here. Remove it.
+        try { localStorage.removeItem("botlens_admin_session"); } catch { }
 
         function getSession() {
             try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch { return null; }
         }
         function setSession(data) { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); }
         function clearSession() { localStorage.removeItem(SESSION_KEY); }
+        function kioskKey() { return getSession()?.key || ""; }
+
+        // A switched-off kiosk, an expired key or a company that was switched
+        // off: back to the sign-in screen, saying why.
+        function kioskSignedOut(message) {
+            clearSession();
+            showLogin();
+            loginError(message || 'This kiosk needs to be set up again. Ask your admin to sign in.');
+        }
+
+        async function handleAuthFailure(res, data) {
+            if (res.status === 401) { kioskSignedOut(data?.message); return true; }
+            if (res.status === 403 && data?.code === 'frozen_tenant') { kioskSignedOut(data.message); return true; }
+            if (res.status === 403 && data?.subscriptionStatus) { showSubscriptionBlock(data.subscriptionStatus); return true; }
+            return false;
+        }
+
+        // The B.O.T server's kiosk routes, with this kiosk's key.
+        async function lensApi(path, opts = {}) {
+            const res = await fetch(`${NODE_API_URL}/api/lens${path}`, {
+                ...opts,
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${kioskKey()}`, ...(opts.headers || {}) },
+                cache: 'no-store',
+            });
+            let data = null; try { data = await res.json(); } catch { }
+            if (!res.ok) {
+                const handled = await handleAuthFailure(res, data);
+                const err = new Error(data?.message || 'Request failed'); err.status = res.status; err.code = data?.code; err.handled = handled;
+                throw err;
+            }
+            return data;
+        }
+
+        // This kiosk server's own routes (face recognition), with the same key.
+        async function kioskApi(path, body, extraHeaders = {}) {
+            const res = await fetch(path, { method: 'POST', body, headers: { Authorization: `Bearer ${kioskKey()}`, ...extraHeaders } });
+            let data = null; try { data = await res.json(); } catch { }
+            if (!res.ok) {
+                const handled = await handleAuthFailure(res, data);
+                const err = new Error(data?.message || 'Request failed'); err.status = res.status; err.handled = handled;
+                throw err;
+            }
+            return data;
+        }
 
         function maskPhone(phone) {
             if (phone.length < 4) return phone;
@@ -1571,6 +1597,7 @@
         }
 
         function logout() {
+            if (!confirm('Sign this kiosk out? An admin will have to sign in on it again.')) return;
             clearSession();
             location.reload();
         }
@@ -1583,6 +1610,33 @@
 
         let loginPhone = "";
         let loginResendTimer = null;
+        let pendingAdminToken = null;
+        let pendingCompany = '';
+
+        document.getElementById('login-kiosk-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            loginError('');
+            const name = document.getElementById('login-kiosk-name').value.trim();
+            if (!name) { loginError('Give this kiosk a name, for example "Reception".'); return; }
+            if (!pendingAdminToken) { loginError('Please sign in again.'); return; }
+            setBtnLoading('login-kiosk-btn', 'login-kiosk-btn-label', true, 'Setting up…', 'Set up this kiosk');
+            try {
+                const res = await fetch(`${NODE_API_URL}/api/lens/kiosks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pendingAdminToken}` },
+                    body: JSON.stringify({ name }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.message || 'Could not set up this kiosk');
+                pendingAdminToken = null;
+                setSession({ key: data.key, kioskName: data.kiosk?.name || name, companyName: pendingCompany, setUpAt: Date.now() });
+                showApp();
+            } catch (err) {
+                loginError(err.message);
+            } finally {
+                setBtnLoading('login-kiosk-btn', 'login-kiosk-btn-label', false, '', 'Set up this kiosk');
+            }
+        });
 
         function otpBoxes() { return Array.from(document.querySelectorAll('.login-otp-digit')); }
 
@@ -1678,11 +1732,13 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.message || 'Invalid OTP');
 
-                setSession({
-                    token: data.token, name: data.name, role: data.role,
-                    phone: data.phone, companyName: data.companyName, adminId: data._id, loggedInAt: Date.now()
-                });
-                showApp();
+                // Held in memory for the one call that creates the kiosk, never stored.
+                pendingAdminToken = data.token;
+                pendingCompany = data.companyName || data.name || '';
+                document.getElementById('login-otp-form').style.display = 'none';
+                document.getElementById('login-kiosk-form').style.display = 'block';
+                document.getElementById('login-subtitle').textContent = 'One last step: give this kiosk a name';
+                document.getElementById('login-kiosk-name').focus();
             } catch (err) {
                 loginError(err.message);
                 const row = document.getElementById('login-otp-row');
@@ -1748,9 +1804,15 @@
         let localStream = null;
         let localLoop = null;
 
-        let editEmployees = []; // BOTLens-local /api/employees (face/salary/bank data)
-        let nodeEmployees = []; // Node/HRMS employee roster — the dropdown's source of truth
-        let photoCaptureActive = false; // true = first-time face capture OR "Change Photo" clicked; false = keeping existing photo
+        // Who can be registered, from the B.O.T server: name and whether a face
+        // is already registered. Nothing else (no phone, bank or PAN) comes here.
+        let roster = [];
+        let photoCaptureActive = false; // true = scanning a face; false = keeping the registered one
+        // Proof the admin is at the kiosk (BOTLens email + password), valid 15 min.
+        // In memory only: a reload asks again.
+        let enrollGrant = null;
+        let enrollGrantUntil = 0;
+        const hasGrant = () => enrollGrant && Date.now() < enrollGrantUntil - 5000;
 
         function stopRegCam() {
             if (localStream) {
@@ -1760,97 +1822,54 @@
         }
 
         function resetEmployeeForm() {
-            // Deliberately doesn't use form.reset() — emp-select lives inside
-            // the same form element, and resetting it there would snap the
-            // dropdown back to the placeholder right as onEmpSelectChange populates it.
             document.getElementById('snap-ok').style.display = 'none';
             document.getElementById('upload-preview').style.display = 'none';
             snapBlob = null;
             snapBlobs = [];
         }
 
-        // The dropdown lists every employee already on record in the HRMS
-        // (created via the admin panel) — BOTLens never creates a brand-new
-        // employee identity here, it only attaches/edits their local face,
-        // salary and bank details.
         async function loadEditEmployeesTab() {
             const select = document.getElementById('emp-select');
-            const session = getSession();
-
             try {
-                const q = session?.adminId ? `?external_admin_id=${encodeURIComponent(session.adminId)}` : '';
-                const localRes = await fetch('/api/employees' + q, { cache: 'no-store' });
-                editEmployees = await localRes.json();
+                roster = await lensApi('/employees');
             } catch (err) {
-                editEmployees = [];
+                if (!err.handled) toast(`Could not load the employee list: ${err.message}`, true);
+                roster = [];
             }
-
-            if (!session?.token) {
-                select.innerHTML = '<option value="" disabled selected>Please log in again</option>';
-                return;
-            }
-
-            try {
-                const res = await fetch(`${NODE_API_URL}/api/users/employees`, {
-                    headers: { Authorization: `Bearer ${session.token}` },
-                    cache: 'no-store'
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.message || 'Failed to load employees');
-                nodeEmployees = data;
-            } catch (err) {
-                toast(`Failed to load employee list: ${err.message}`, true);
-                nodeEmployees = [];
-            }
-
             const previousValue = select.value;
+            const esc = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
             select.innerHTML = '<option value="" disabled' + (previousValue ? '' : ' selected') + '>Select an employee</option>' +
-                nodeEmployees.map(e => `<option value="${e._id}">${e.name}</option>`).join('');
-
-            select.value = nodeEmployees.some(e => e._id === previousValue) ? previousValue : '';
+                roster.map(e => `<option value="${esc(e._id)}">${esc(e.name)}${e.hasFace ? ' ✓' : ''}</option>`).join('');
+            select.value = roster.some(e => e._id === previousValue) ? previousValue : '';
             onEmpSelectChange();
         }
 
         function onEmpSelectChange() {
-            const nodeId = document.getElementById('emp-select').value;
+            const id = document.getElementById('emp-select').value;
             resetEmployeeForm();
             stopRegCam();
 
             const detailsBlock = document.getElementById('emp-details-fields');
             const submitBtn = document.getElementById('btn-reg');
-
-            if (!nodeId) {
+            if (!id) {
                 detailsBlock.style.display = 'none';
                 submitBtn.disabled = true;
-                document.getElementById('add-phone').value = '';
                 return;
             }
-
-            const nodeEmp = nodeEmployees.find(e => e._id === nodeId);
-            if (!nodeEmp) return;
-            const localEmp = editEmployees.find(e => e.external_user_id === nodeId);
-
+            const person = roster.find(e => e._id === id);
+            if (!person) return;
             detailsBlock.style.display = 'block';
             submitBtn.disabled = false;
 
-            document.getElementById('add-phone').value = nodeEmp.phone || '';
-            const salType = (localEmp?.monthly_salary || 0) > 0 ? 'monthly' : 'hourly';
-            document.getElementById('add-sal-type').value = salType;
-            document.getElementById('add-monthly').value = localEmp?.monthly_salary || 0;
-            document.getElementById('add-hourly').value = localEmp?.hourly_rate || 0;
-            toggleSalFields('add');
-            document.getElementById('add-bank').value = localEmp?.bank_name || '';
-            document.getElementById('add-acc').value = localEmp?.bank_account || '';
-            document.getElementById('add-ifsc').value = localEmp?.bank_ifsc || '';
-
-            if (localEmp?.photo_url) {
-                document.getElementById('current-photo-img').src = localEmp.photo_url;
+            if (person.hasFace) {
+                document.getElementById('current-photo-img').src = person.thumbnailUrl || '';
+                document.getElementById('current-photo-note').textContent = person.faceUpdatedAt
+                    ? `Face registered ${new Date(person.faceUpdatedAt).toLocaleDateString('en-IN')}`
+                    : 'Face registered';
                 document.getElementById('current-photo-block').style.display = 'block';
                 document.getElementById('photo-capture-block').style.display = 'none';
                 photoCaptureActive = false;
             } else {
-                // No local face record for this employee yet — capture their
-                // first photo directly, no separate "add employee" step needed.
                 document.getElementById('current-photo-block').style.display = 'none';
                 document.getElementById('photo-capture-block').style.display = 'block';
                 photoCaptureActive = true;
@@ -1863,6 +1882,21 @@
             document.getElementById('photo-capture-block').style.display = 'block';
             photoCaptureActive = true;
             setPhotoSource('cam');
+        }
+
+        async function removeFace() {
+            const id = document.getElementById('emp-select').value;
+            const person = roster.find(e => e._id === id);
+            if (!person || !confirm(`Remove ${person.name}'s face? This kiosk will stop recognising them until they are scanned again.`)) return;
+            if (!hasGrant()) return askForGrant();
+            try {
+                await lensApi(`/faces/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'x-enroll-grant': enrollGrant } });
+                toast('Face removed');
+                await loadEditEmployeesTab();
+            } catch (err) {
+                if (err.code === 'enroll_grant_needed') return askForGrant();
+                if (!err.handled) toast(err.message, true);
+            }
         }
 
         function toggleSidebar() {
@@ -1981,12 +2015,6 @@
             } catch (playErr) {
                 console.error("Video Play Error:", playErr);
             }
-        }
-
-        function toggleSalFields(pre) {
-            const type = document.getElementById(pre + '-sal-type').value;
-            document.getElementById(pre + '-monthly-group').style.display = type === 'monthly' ? 'block' : 'none';
-            document.getElementById(pre + '-hourly-group').style.display = type === 'hourly' ? 'block' : 'none';
         }
 
         function toast(m, err = false, action = null, isPunch = false) {
@@ -2148,9 +2176,7 @@
                         c_proc.getContext('2d').drawImage(v, 0, 0, 320, 240);
                         const blob = await new Promise(r => c_proc.toBlob(r, 'image/jpeg', 0.5));
                         const fd = new FormData(); fd.append('file', blob);
-                        const res = await fetch('/api/process_frame', { method: 'POST', body: fd });
-                        if (!res.ok) throw new Error("API Error");
-                        const data = await res.json();
+                        const data = await kioskApi('/api/process_frame', fd);
                         if (data.detections && data.detections.length > 0) {
                             currentPose = data.detections[0].pose;
                         } else {
@@ -2251,93 +2277,34 @@
 
         document.getElementById('add-form').onsubmit = async (e) => {
             e.preventDefault();
-
-            const nodeId = document.getElementById('emp-select').value;
-            if (!nodeId) return toast('Select an employee first', true);
-
-            const nodeEmp = nodeEmployees.find(x => x._id === nodeId);
-            const localEmp = editEmployees.find(x => x.external_user_id === nodeId);
-            const hasLocalRecord = !!localEmp;
+            const id = document.getElementById('emp-select').value;
+            if (!id) return toast('Select an employee first', true);
+            const person = roster.find(x => x._id === id);
             const hasNewPhoto = snapBlobs.length > 0 || !!snapBlob;
-
-            // First time this employee's face is being captured here always
-            // needs a photo; if they already have one, only "Change Photo" does.
-            if (!hasLocalRecord && !hasNewPhoto) {
-                return toast('Please capture or upload a face photo', true);
+            if (!hasNewPhoto) {
+                return toast(person?.hasFace && !photoCaptureActive ? 'Nothing to save. Tap "Scan again" to replace the face.' : 'Scan the face first', true);
             }
-            if (hasLocalRecord && photoCaptureActive && !hasNewPhoto) {
-                return toast('Please capture or upload the new face photo', true);
-            }
+            if (!hasGrant()) return askForGrant();
 
             const fd = new FormData();
-            if (snapBlobs.length > 0) {
-                snapBlobs.forEach((blob, i) => fd.append('photo', blob, `face_${i}.jpg`));
-            } else if (snapBlob) {
-                fd.append('photo', snapBlob, 'face.jpg');
-            }
+            fd.append('employee_id', id);
+            if (snapBlobs.length > 0) snapBlobs.forEach((blob, i) => fd.append('photo', blob, `face_${i}.jpg`));
+            else fd.append('photo', snapBlob, 'face.jpg');
 
             const btn = document.getElementById('btn-reg');
             btn.disabled = true; btn.textContent = 'Saving...';
-
-            const name = nodeEmp.name;
-            const phone = nodeEmp.phone || '';
-
-            fd.append('name', name);
-            fd.append('phone', phone);
-            fd.append('monthly_salary', document.getElementById('add-monthly').value);
-            fd.append('hourly_rate', document.getElementById('add-hourly').value);
-            fd.append('bank_name', document.getElementById('add-bank').value);
-            fd.append('bank_account', document.getElementById('add-acc').value);
-            fd.append('bank_ifsc', document.getElementById('add-ifsc').value);
-
             try {
-                const url = hasLocalRecord ? `/api/employees/${localEmp.id}` : '/api/employees';
-                const method = hasLocalRecord ? 'PUT' : 'POST';
-                const res = await fetch(url, { method, body: fd });
-                const data = await res.json();
-                if (res.ok && !data.error) {
-                    if (!hasLocalRecord) await linkLocalEmployeeToHrms(data.id, nodeId, name);
-                    toast('Employee Updated!');
-                    await loadEditEmployeesTab();
-                } else {
-                    toast(data.error || 'Save Failed', true);
-                }
+                const data = await kioskApi('/api/enroll', fd, { 'x-enroll-grant': enrollGrant });
+                toast(`${person?.name || 'Face'} saved (${data.scans} scan${data.scans === 1 ? '' : 's'})`);
+                await loadEditEmployeesTab();
             } catch (err) {
-                console.error(err);
-                toast('Error connecting to server', true);
+                if (err.status === 401 && !err.handled) askForGrant();
+                else if (!err.handled) toast(err.message || 'Save failed', true);
             }
-            btn.disabled = false; btn.textContent = 'Save Employee';
+            btn.disabled = false; btn.textContent = 'Save Face';
         };
 
-        // Links a newly-captured local face record to the HRMS employee it
-        // belongs to (the HRMS employee itself already exists — created via
-        // the admin panel, never here) so future camera punches sync there too.
-        async function linkLocalEmployeeToHrms(localId, nodeId, name) {
-            const session = getSession();
-            if (!session?.adminId) {
-                toast('Saved locally, but could not link to HRMS — please log out and back in, then try again.', true);
-                return;
-            }
-            const linkFd = new FormData();
-            linkFd.append('name', name);
-            linkFd.append('external_admin_id', session.adminId);
-            linkFd.append('external_user_id', nodeId);
-            await fetch('/api/employees/' + localId, { method: 'PUT', body: linkFd });
-        }
-
-        function confirmAndShowEditEmployees() {
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar.classList.contains('open')) toggleSidebar();
-
-            // Switch to the tab (which stops the Live View camera/recognition
-            // loop) BEFORE showing anything else — otherwise a face detected
-            // while the admin is mid-typing their credentials can still fire a
-            // real punch, whose alert renders on top of the modal.
-            showTab('add', loadEditEmployeesTab);
-
-            const session = getSession();
-            if (session?.employeeEditVerified) return; // already confirmed this login — don't ask again
-
+        function askForGrant() {
             document.getElementById('add-auth-email').value = '';
             document.getElementById('add-auth-password').value = '';
             document.getElementById('add-auth-error').style.display = 'none';
@@ -2345,11 +2312,15 @@
             setTimeout(() => document.getElementById('add-auth-email').focus(), 50);
         }
 
-        // Cancelling the identity check must not leave Edit Employees visible —
-        // confirmAndShowEditEmployees() switches to that tab BEFORE the modal
-        // even opens (to kill the camera loop), so hiding the modal alone left
-        // the fully interactive Edit Employees screen exposed underneath with
-        // no email/password ever having been verified.
+        function confirmAndShowEditEmployees() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar.classList.contains('open')) toggleSidebar();
+            // Switch tab first: that stops the live camera, so no face is
+            // recorded while the admin types the password.
+            showTab('add', loadEditEmployeesTab);
+            if (!hasGrant()) askForGrant();
+        }
+
         function cancelAddEmployeeAuth() {
             document.getElementById('add-employee-auth-modal').style.display = 'none';
             showTab('live', startLive);
@@ -2361,22 +2332,12 @@
             const password = document.getElementById('add-auth-password').value;
             const errEl = document.getElementById('add-auth-error');
             errEl.style.display = 'none';
-
-            const session = getSession();
-            if (!session?.token) { errEl.textContent = 'Please log in again'; errEl.style.display = 'block'; return; }
-
             const btn = document.getElementById('add-auth-submit-btn');
             btn.disabled = true; btn.textContent = 'Verifying...';
             try {
-                const res = await fetch(`${NODE_API_URL}/api/users/verify-add-employee`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
-                    body: JSON.stringify({ email, password })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.message || 'Verification failed');
-
-                setSession({ ...session, employeeEditVerified: true });
+                const data = await lensApi('/enroll-grant', { method: 'POST', body: JSON.stringify({ email, password }) });
+                enrollGrant = data.grant;
+                enrollGrantUntil = Date.now() + (data.expiresInSec || 900) * 1000;
                 document.getElementById('add-employee-auth-modal').style.display = 'none';
             } catch (err) {
                 errEl.textContent = err.message;
@@ -2386,10 +2347,35 @@
             }
         }
 
+        // Plain words for a sighting's result: the B.O.T server's own answer.
+        const ACTION_TITLES = { 'punch-in': 'PUNCHED IN', 'punch-out': 'PUNCHED OUT', 'lunch-in': 'LUNCH STARTED', 'lunch-out': 'BACK FROM LUNCH' };
+        function showSighting(ev) {
+            const who = ev.employee?.name || ev.name || '';
+            if (ev.recorded && ev.action) {
+                document.getElementById('punch-sound').play().catch(() => { });
+                const alertEl = document.getElementById('punch-alert');
+                document.getElementById('alert-title').textContent = ACTION_TITLES[ev.action] || 'RECORDED';
+                document.getElementById('alert-msg').textContent = `${who} · ${ev.message || ''}`;
+                alertEl.style.display = 'block';
+                clearTimeout(showSighting.t);
+                showSighting.t = setTimeout(() => { alertEl.style.display = 'none'; }, 4000);
+                toast(`${who}: ${ev.message}`);
+                startLive();
+            } else if (ev.offline) {
+                toast(`${who}: ${ev.message}`, true);
+            } else if (ev.recorded) {
+                toast(`${who}: ${ev.message}`);
+                startLive();
+            } else if (ev.reason === 'refused') {
+                toast(`${who}: ${ev.message}`, true);
+            }
+            // 'debounced' / 'duplicate': the person is still in front of the camera, nothing to say.
+        }
+
         let isProcessing = false;
         async function pushFrame() {
             if (isProcessing) return;
-            if (subscriptionBlocked) { requestAnimationFrame(pushFrame); return; }
+            if (subscriptionBlocked || !kioskKey()) { setTimeout(pushFrame, 1000); return; }
             const v = document.getElementById('local-v');
             const c = document.getElementById('local-c');
             if (!v || !localStream || v.videoWidth === 0) {
@@ -2398,117 +2384,79 @@
             }
 
             isProcessing = true;
-            // Increased dimensions for better distance matching
-            const targetWidth = 800;
+            const targetWidth = 800; // larger frames find faces further away
             const scale = targetWidth / v.videoWidth;
             c.width = targetWidth;
             c.height = v.videoHeight * scale;
-
-            const ctx = c.getContext('2d');
-            ctx.drawImage(v, 0, 0, c.width, c.height);
+            c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
 
             c.toBlob(async (blob) => {
                 if (!blob) { isProcessing = false; setTimeout(pushFrame, 100); return; }
                 const fd = new FormData();
                 fd.append('photo', blob, 'f.jpg');
+                const ind = document.getElementById('frame-indicator');
                 try {
-                    const res = await fetch('/api/process_client_frame', { method: 'POST', body: fd });
-                    const data = await res.json();
+                    const data = await kioskApi('/api/process_client_frame', fd);
                     const overlay = document.getElementById('overlay-c');
                     const octx = overlay.getContext('2d');
-
-                    // Match resolution for drawing
                     overlay.width = c.width;
                     overlay.height = c.height;
                     octx.clearRect(0, 0, overlay.width, overlay.height);
-
-                    if (data && data.detections) {
-                        data.detections.forEach(d => {
-                            const color = d.status === 'IN' ? '#00ff00' : '#ff0000';
-                            octx.strokeStyle = color;
-                            octx.lineWidth = 4;
-                            octx.strokeRect(d.x, d.y, d.w, d.h);
-
-                            octx.fillStyle = color;
-                            octx.font = 'bold 20px Arial';
-                            octx.fillText(`${d.name} (${d.status})`, d.x, d.y - 10);
-                        });
-
-                        const ind = document.getElementById('frame-indicator');
-                        if (ind) {
-                            ind.textContent = '📡 AI Active: ' + new Date().toLocaleTimeString();
-                            ind.style.color = '#00ff00';
-                        }
-                    }
+                    (data.detections || []).forEach(d => {
+                        const [x, y, w, h] = d.box || [0, 0, 0, 0];
+                        const known = !!d.employeeId;
+                        const color = !known ? '#9ca3af' : (d.onDuty ? '#00ff00' : '#ffb020');
+                        octx.strokeStyle = color;
+                        octx.lineWidth = 4;
+                        octx.strokeRect(x, y, w, h);
+                        octx.fillStyle = color;
+                        octx.font = 'bold 20px Arial';
+                        octx.fillText(known ? d.name : 'Not registered', x, Math.max(20, y - 10));
+                    });
+                    (data.events || []).forEach(showSighting);
+                    if (ind) { ind.textContent = '📡 Recognition on · ' + new Date().toLocaleTimeString(); ind.style.color = '#00ff00'; }
                 } catch (e) {
-                    console.error("Fetch Error:", e);
-                    const ind = document.getElementById('frame-indicator');
-                    if (ind) {
-                        ind.textContent = '❌ Server Error';
-                        ind.style.color = '#ff0000';
-                    }
+                    if (ind) { ind.textContent = e.status === 503 ? '❌ No connection to B.O.T' : '❌ ' + (e.message || 'Server error'); ind.style.color = '#ff0000'; }
+                    if (e.handled) { isProcessing = false; return; }
+                    await new Promise(r => setTimeout(r, 1500));
                 }
                 isProcessing = false;
                 requestAnimationFrame(pushFrame);
             }, 'image/jpeg', 0.5);
         }
+
+        // Today's sightings at this company's kiosks, as the B.O.T server
+        // recorded them -- not what this page assumed.
+        const IS_IN = { 'punch-in': true, 'lunch-out': true, 'punch-out': false, 'lunch-in': false };
+        const ACTION_WORDS = { 'punch-in': 'Punched in', 'punch-out': 'Punched out', 'lunch-in': 'Lunch', 'lunch-out': 'Back from lunch' };
         async function startLive() {
             const g = document.getElementById('active-grid');
             if (!g) return;
+            let rows;
+            try { rows = await lensApi('/activity'); } catch { return; }
+            const esc = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-            const session = getSession();
-            // Scope to today only — an employee who punched in yesterday and
-            // never punched out (forgot, mis-recognized, etc.) would otherwise
-            // show as still "PUNCHED IN" on the live grid forever, since this
-            // takes the last-known action per employee across all of history.
-            const now = new Date();
-            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-            const params = new URLSearchParams({ date_str: todayStr });
-            if (session?.adminId) params.set('external_admin_id', session.adminId);
-            const res = await fetch('/api/history?' + params.toString(), { cache: 'no-store' });
-            const data = await res.json();
-
-            if (data.length > 0) {
-                const latest = data[data.length - 1]; // Get the most recent log
-                if (lastLogId !== 0 && latest.id > lastLogId) {
-                    // New event!
-                    document.getElementById('punch-sound').play().catch(() => { });
-                    toast(`${latest.employee_name}: ${latest.action.replace('_', ' ')}`, false, null, true);
-                }
-                lastLogId = latest.id;
-            }
-
-            // Sync currently active employees (latest status for each)
-            const statusMap = {};
-            data.forEach(l => {
-                statusMap[l.employee_name] = l.action;
-            });
-
-            // Update Active Grid
+            const latest = new Map(); // newest meaningful sighting per person
+            rows.forEach(r => { if (r.action && !latest.has(r.employeeId)) latest.set(r.employeeId, r); });
             g.innerHTML = '';
-            Object.entries(statusMap).forEach(([name, action]) => {
-                if (action.includes('IN')) {
-                    const d = document.createElement('div');
-                    d.className = 'card pulse';
-                    const label = action === 'LUNCH_IN' ? 'BACK FROM LUNCH' : 'PUNCHED IN';
-                    d.innerHTML = `<img src="https://ui-avatars.com/api/?name=${name}&background=9d174d&color=fff"><br><strong>${name}</strong><br><small style="color:#00ff00;">${label}</small>`;
-                    g.appendChild(d);
-                }
+            latest.forEach((r) => {
+                if (!IS_IN[r.action]) return;
+                const d = document.createElement('div');
+                d.className = 'card pulse';
+                d.innerHTML = `<img src="https://ui-avatars.com/api/?name=${encodeURIComponent(r.name)}&background=9d174d&color=fff"><br><strong>${esc(r.name)}</strong><br><small style="color:#00ff00;">${esc(ACTION_WORDS[r.action]).toUpperCase()}</small>`;
+                g.appendChild(d);
             });
 
-            // Update Recent Log List (last 10 events)
             const logList = document.getElementById('recent-log-list');
             if (logList) {
-                logList.innerHTML = '';
-                data.slice(-10).reverse().forEach(l => {
+                logList.innerHTML = rows.length ? '' : '<div style="text-align:center; padding:20px; opacity:0.5;">No face punches today yet.</div>';
+                rows.slice(0, 15).forEach(r => {
                     const li = document.createElement('div');
                     li.style = "padding:10px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.8rem;";
-                    const color = l.action.includes('IN') ? '#00ff00' : '#ff4444';
-                    li.innerHTML = `
-                        <span><strong>${l.employee_name}</strong></span>
-                        <span style="color:${color}; font-weight:700;">${l.action.replace('_', ' ')}</span>
-                        <span style="opacity:0.6;">${l.timestamp.split(' ')[1]}</span>
-                    `;
+                    const label = r.repeat ? 'Seen again' : (ACTION_WORDS[r.action] || 'Seen');
+                    const color = r.repeat || !r.action ? '#9ca3af' : (IS_IN[r.action] ? '#00ff00' : '#ff4444');
+                    const time = new Date(r.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                    li.innerHTML = `<span><strong>${esc(r.name)}</strong></span><span style="color:${color}; font-weight:700;">${esc(label)}</span><span style="opacity:0.6;">${time}</span>`;
                     logList.appendChild(li);
                 });
             }
@@ -2534,33 +2482,30 @@
             document.getElementById('subscription-block-overlay').style.display = 'none';
         }
 
-        async function checkSubscriptionStatus() {
-            const session = getSession();
-            if (!session?.token) return;
+        // Is this kiosk still switched on, and its company's plan active? The
+        // server answers from its own records on every call; this just keeps
+        // the screen honest while nobody walks past.
+        async function checkKiosk() {
             try {
-                const res = await fetch(`${NODE_API_URL}/api/users/subscription`, {
-                    headers: { Authorization: `Bearer ${session.token}` }
-                });
-                if (!res.ok) return; // don't block the app on a transient auth/network hiccup
-                const data = await res.json();
-                if (['expired', 'cancelled', 'paused'].includes(data.status)) {
-                    showSubscriptionBlock(data.status);
-                } else {
-                    hideSubscriptionBlock();
+                const me = await lensApi('/me');
+                hideSubscriptionBlock();
+                const s = getSession();
+                if (s && (s.kioskName !== me.kiosk?.name || s.companyName !== me.company?.name)) {
+                    setSession({ ...s, kioskName: me.kiosk?.name, companyName: me.company?.name });
                 }
             } catch (err) {
-                // Network error — leave current block state as-is rather than guessing
+                // 401 / frozen / subscription are handled in lensApi; a network
+                // error leaves the screen as it is rather than guessing.
             }
         }
 
         function initApp() {
-            setInterval(startLive, 2000);
+            setInterval(startLive, 5000);
             startLocalCam('local-v');
             startLive();
             pushFrame();
-
-            checkSubscriptionStatus();
-            setInterval(checkSubscriptionStatus, 60000);
+            checkKiosk();
+            setInterval(checkKiosk, 60000);
         }
 
         // PWA Installation Logic — the browser fires beforeinstallprompt on its
@@ -2603,7 +2548,7 @@
         // Boot: skip the login screen if a session is already stored
         (function bootLogin() {
             const session = getSession();
-            if (session && session.token) {
+            if (session && session.key) {
                 showApp();
             } else {
                 showLogin();

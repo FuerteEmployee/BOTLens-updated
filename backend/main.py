@@ -1,292 +1,207 @@
-import os
-from dotenv import load_dotenv
-load_dotenv()
-import cv2
-import json
-import time
-import numpy as np
-import base64
-from fastapi import FastAPI, Depends, File, UploadFile, Form, BackgroundTasks
-from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse, Response
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
-from database import engine, Base, get_db
-from models import Employee, AttendanceLog, ActivityStats
-from engine import process_frame, encode_face, trigger_retrain
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse, FileResponse
-import uvicorn
+"""
+BOTLens face kiosk server.
 
+Recognises faces and reports sightings; keeps nothing about people. Every API
+route needs the kiosk's key (`Authorization: Bearer <key>`), which the B.O.T
+backend issued when an admin set the kiosk up, and every one of them works only
+on that key's company. See hub.py for the backend calls and engine.py for the
+face maths.
+"""
+import base64
+import os
 from typing import List
 
-# Create tables after models are loaded
-Base.metadata.create_all(bind=engine)
+from dotenv import load_dotenv
 
-print("--- BOTLens v1.2 Deployment (Distance Opt + Upload) Active ---")
-app = FastAPI(title="BOT Lens")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+load_dotenv()
+
+from fastapi import FastAPI, File, Form, Request, UploadFile  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+import engine as face  # noqa: E402
+import hub  # noqa: E402
+from database import Base, engine as db_engine  # noqa: E402
+import models  # noqa: E402,F401  (registers the outbox table)
+
+Base.metadata.create_all(bind=db_engine)
+
+app = FastAPI(title="BOT Lens", docs_url=None, redoc_url=None, openapi_url=None)
+
+# The page is served from this same server, so it needs no CORS at all; these
+# are only for local development across ports.
+_origins = [o.strip() for o in os.getenv(
+    "LENS_ALLOWED_ORIGINS",
+    "https://botlens.beontimeofficial.com,http://localhost:8000,https://localhost:8000",
+).split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_credentials=False,
+                   allow_methods=["GET", "POST"], allow_headers=["Authorization", "Content-Type", "x-enroll-grant"])
+
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    import traceback
-    err = traceback.format_exc()
-    print(f"--- GLOBAL ERROR STACK: {err} ---")
-    return JSONResponse(status_code=500, content={"message": str(exc), "trace": err})
+async def unexpected(request, exc):
+    # Logged here, never sent: a stack trace tells a caller how the server is built.
+    print(f"--- ERROR {request.method} {request.url.path}: {exc!r} ---")
+    return JSONResponse(status_code=500, content={"message": "Something went wrong. Please try again."})
 
-photo_dir = os.getenv("PHOTO_DIR", "data/photos")
-os.makedirs(photo_dir, exist_ok=True)
-app.mount("/photos", StaticFiles(directory=photo_dir), name="photos")
 
-def photo_url(path: str):
-    if not path: return None
-    rel = os.path.relpath(path, photo_dir).replace(os.sep, "/")
-    return f"/photos/{rel}"
+@app.middleware("http")
+async def key_first(request: Request, call_next):
+    # A request with no kiosk key is refused before anything else is read, so
+    # an empty probe gets "not set up", not a form-validation error. The key
+    # itself is checked against the backend in each route (hub.whoami).
+    if request.url.path.startswith("/api/") and request.method != "OPTIONS" \
+            and not (request.headers.get("authorization") or "").strip():
+        return JSONResponse(status_code=401, content={"code": "kiosk_key_missing", "message": "This kiosk is not set up."})
+    return await call_next(request)
+
+
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/favicon.ico")
-async def favicon():
-    return FileResponse("static/icon.png")
-
-@app.get("/manifest.json")
-async def get_manifest():
-    return FileResponse("static/manifest.json")
-
-@app.get("/config.js")
-async def get_config():
-    node_api_url = os.getenv("NODE_API_URL", "http://localhost:5000")
-    return Response(content=f'window.NODE_API_URL = "{node_api_url}";', media_type="application/javascript")
-
-@app.get("/sw.js")
-async def get_sw():
-    return FileResponse("static/sw.js", media_type="application/javascript")
-
-# Distributed Frame Processing (Every device uses its own camera)
-@app.post("/api/process_client_frame")
-async def process_client_frame(
-    photo: UploadFile = File(...), 
-    db: Session = Depends(get_db)
-):
-    contents = await photo.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    if frame is None:
-        return {"error": "Invalid image"}
-
-    # Process using engine
-    try:
-        # Get detections and names instead of a full processed image
-        detections = [] # List of {x, y, w, h, name, status}
-        processed_frame = process_frame(frame, db, detections_list=detections)
-        
-        _, buffer = cv2.imencode('.jpg', processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
-        encoded_image = base64.b64encode(buffer).decode('utf-8')
-        
-        return {
-            "image": encoded_image,
-            "detections": detections
-        }
-    except Exception as e:
-        print(f"--- FRAME ERROR: {str(e)} ---")
-        return {"error": str(e)}
-
-@app.post("/api/employees")
-async def add_employee(
-    name: str = Form(...),
-    photo: List[UploadFile] = File(...),
-    phone: str = Form(""),
-    monthly_salary: float = Form(0.0),
-    hourly_rate: float = Form(0.0),
-    bank_name: str = Form(""),
-    bank_account: str = Form(""),
-    bank_ifsc: str = Form(""),
-    external_admin_id: str = Form(""),
-    external_user_id: str = Form(""),
-    db: Session = Depends(get_db)
-):
-    # Create employee-specific folder
-    timestamp = int(time.time())
-    emp_folder = os.path.join(photo_dir, f"{name.replace(' ', '_')}_{timestamp}")
-    os.makedirs(emp_folder, exist_ok=True)
-    
-    saved_paths = []
-    for i, p in enumerate(photo):
-        p_path = os.path.join(emp_folder, f"face_{i}.jpg")
-        with open(p_path, "wb") as b: b.write(await p.read())
-        saved_paths.append(p_path)
-    
-    if not saved_paths:
-        return {"error": "No photos received"}
-
-    # Check first photo for face
-    enc = encode_face(saved_paths[0])
-    if enc is None:
-        import shutil
-        shutil.rmtree(emp_folder)
-        return {"error": "No face detected in primary photo. Please try again."}
-    
-    emp = Employee(
-        name=name, phone=phone, photo_path=saved_paths[0], face_encoding=json.dumps(enc.tolist()),
-        monthly_salary=monthly_salary, hourly_rate=hourly_rate,
-        bank_name=bank_name, bank_account=bank_account, bank_ifsc=bank_ifsc,
-        external_admin_id=external_admin_id, external_user_id=external_user_id
-    )
-    db.add(emp); db.commit(); db.refresh(emp)
-    trigger_retrain()
-    return {"id": emp.id}
-
-@app.get("/api/employees")
-def get_employees(external_admin_id: str = None, db: Session = Depends(get_db)):
-    query = db.query(Employee).filter(Employee.is_active == 1)
-    if external_admin_id:
-        query = query.filter(Employee.external_admin_id == external_admin_id)
-    emps = query.all()
-    return [{
-        "id": e.id, "name": e.name, "phone": e.phone, "photo_path": e.photo_path, "photo_url": photo_url(e.photo_path),
-        "monthly_salary": e.monthly_salary, "hourly_rate": e.hourly_rate,
-        "bank_name": e.bank_name, "bank_account": e.bank_account, "bank_ifsc": e.bank_ifsc,
-        "external_admin_id": e.external_admin_id, "external_user_id": e.external_user_id
-    } for e in emps]
-
-@app.put("/api/employees/{emp_id}")
-async def update_employee(
-    emp_id: int,
-    name: str = Form(...),
-    phone: str = Form(None),
-    monthly_salary: float = Form(None),
-    hourly_rate: float = Form(None),
-    bank_name: str = Form(None),
-    bank_account: str = Form(None),
-    bank_ifsc: str = Form(None),
-    external_admin_id: str = Form(None),
-    external_user_id: str = Form(None),
-    photo: List[UploadFile] = File(None),
-    db: Session = Depends(get_db)
-):
-    emp = db.query(Employee).filter(Employee.id == emp_id).first()
-    if emp:
-        emp.name = name
-        if phone is not None: emp.phone = phone
-        if monthly_salary is not None: emp.monthly_salary = monthly_salary
-        if hourly_rate is not None: emp.hourly_rate = hourly_rate
-        if bank_name is not None: emp.bank_name = bank_name
-        if bank_account is not None: emp.bank_account = bank_account
-        if bank_ifsc is not None: emp.bank_ifsc = bank_ifsc
-        if external_admin_id is not None: emp.external_admin_id = external_admin_id
-        if external_user_id is not None: emp.external_user_id = external_user_id
-
-        # Replace the face photo(s) — re-derive the encoding so recognition
-        # picks up the new face immediately after retrain. Written to a
-        # staging folder first and validated *before* touching the employee's
-        # existing photos, so a bad upload (no face detected) can't destroy
-        # the current working photo.
-        if photo:
-            emp_folder = os.path.dirname(emp.photo_path) if emp.photo_path else os.path.join(photo_dir, f"{name.replace(' ', '_')}_{emp.id}")
-            staging_folder = emp_folder + "_staging"
-            import shutil
-            if os.path.isdir(staging_folder): shutil.rmtree(staging_folder)
-            os.makedirs(staging_folder, exist_ok=True)
-
-            staged_paths = []
-            for i, p in enumerate(photo):
-                p_path = os.path.join(staging_folder, f"face_{i}.jpg")
-                with open(p_path, "wb") as b: b.write(await p.read())
-                staged_paths.append(p_path)
-
-            if staged_paths:
-                enc = encode_face(staged_paths[0])
-                if enc is None:
-                    shutil.rmtree(staging_folder)
-                    return {"error": "No face detected in the new photo. Please try again."}
-
-                # Validated — now safe to replace the live folder's contents.
-                os.makedirs(emp_folder, exist_ok=True)
-                for f in os.listdir(emp_folder):
-                    if f.startswith("face_"): os.remove(os.path.join(emp_folder, f))
-                saved_paths = []
-                for i, p in enumerate(staged_paths):
-                    dest = os.path.join(emp_folder, f"face_{i}.jpg")
-                    shutil.move(p, dest)
-                    saved_paths.append(dest)
-                shutil.rmtree(staging_folder, ignore_errors=True)
-
-                emp.photo_path = saved_paths[0]
-                emp.face_encoding = json.dumps(enc.tolist())
-
-        db.commit()
-        trigger_retrain()
-    return {"success": True}
-
-@app.delete("/api/employees/{emp_id}")
-async def delete_employee(emp_id: int, db: Session = Depends(get_db)):
-    emp = db.query(Employee).filter(Employee.id == emp_id).first()
-    if emp: 
-        emp.is_active = 0
-        db.commit()
-        trigger_retrain()
-    return {"success": True}
-
-@app.get("/api/history")
-def get_history(emp_id: int = None, date_str: str = None, external_admin_id: str = None, db: Session = Depends(get_db)):
-    query = db.query(AttendanceLog).join(Employee).filter(Employee.is_active == 1)
-    if emp_id:
-        query = query.filter(AttendanceLog.employee_id == emp_id)
-    if external_admin_id:
-        query = query.filter(Employee.external_admin_id == external_admin_id)
-    if date_str:
-        # date format: YYYY-MM-DD
-        from datetime import datetime
-        start_date = datetime.strptime(date_str, "%Y-%m-%d")
-        end_date = start_date.replace(hour=23, minute=59, second=59)
-        query = query.filter(AttendanceLog.timestamp >= start_date, AttendanceLog.timestamp <= end_date)
-    
-    logs = query.order_by(AttendanceLog.timestamp.asc()).all()
-    return [{"id": l.id, "employee_name": l.employee.name if l.employee else "Unknown", "action": l.action, "reason": l.reason, "timestamp": l.timestamp.strftime("%Y-%m-%d %H:%M:%S")} for l in logs]
-
-@app.get("/api/stats")
-def get_stats(external_admin_id: str = None, db: Session = Depends(get_db)):
-    query = db.query(ActivityStats).join(Employee).filter(Employee.is_active == 1)
-    if external_admin_id:
-        query = query.filter(Employee.external_admin_id == external_admin_id)
-    stats = query.order_by(ActivityStats.date.desc()).all()
-    res = []
-    for s in stats:
-        h_w, m_w, s_w = s.work_seconds // 3600, (s.work_seconds % 3600) // 60, s.work_seconds % 60
-        h_p, m_p, s_p = s.phone_seconds // 3600, (s.phone_seconds % 3600) // 60, s.phone_seconds % 60
-        daily_salary = 0.0
-        emp = s.employee
-        if emp.monthly_salary > 0: daily_salary = emp.monthly_salary / 30.0
-        elif emp.hourly_rate > 0: daily_salary = (s.work_seconds / 3600.0) * emp.hourly_rate
-        res.append({
-            "employee_name": emp.name, "date": s.date,
-            "work_time": f"{h_w:02d}:{m_w:02d}:{s_w:02d}",
-            "phone_time": f"{h_p:02d}:{m_p:02d}:{s_p:02d}",
-            "total_seconds": s.work_seconds + s.phone_seconds,
-            "daily_salary": round(daily_salary, 2)
-        })
-    return res
 
 @app.get("/")
-def get_index(): return FileResponse("frontend/index.html")
+def index():
+    return FileResponse("frontend/index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/favicon.ico")
+def favicon():
+    return FileResponse("static/icon.png")
+
+
+@app.get("/manifest.json")
+def manifest():
+    return FileResponse("static/manifest.json")
+
+
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse("static/sw.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/config.js")
+def config():
+    return Response(content=f'window.NODE_API_URL = "{hub.NODE_API_URL}";', media_type="application/javascript")
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+
+def _key(request: Request):
+    h = request.headers.get("authorization") or ""
+    return h[7:].strip() if h.startswith("Bearer ") else h.strip()
+
+
+def _refuse(e: hub.BackendError):
+    return JSONResponse(status_code=e.status if e.status in (401, 403, 429, 503) else 502, content=e.body)
+
+
+def _scaled_box(face_row, scale):
+    x, y, w, h = [int(round(float(v) * scale)) for v in face_row[:4]]
+    return [x, y, w, h]
+
+
+@app.post("/api/process_client_frame")
+def process_client_frame(request: Request, photo: UploadFile = File(...)):
+    """
+    One camera frame from the kiosk page. Returns the faces found (box, name,
+    head pose) and, for each person newly seen, what the backend recorded --
+    the kiosk shows that answer, so it can never claim a punch that did not
+    happen.
+    """
+    key = _key(request)
+    try:
+        me = hub.whoami(key)
+    except hub.BackendError as e:
+        return _refuse(e)
+
+    img = face.decode_image(photo.file.read())
+    if img is None:
+        return JSONResponse(status_code=400, content={"message": "The camera frame could not be read."})
+
+    company = str(me["company"]["_id"])
+    known = hub.faces_for(key, me)
+    work, rows, scale = face.detect(img)
+    detections, events = [], []
+    for row in rows:
+        emp_id, name, score = (None, None, 0.0)
+        if known:
+            emp_id, name, score = face.best_match(face.embed(work, row), known)
+        det = {"box": _scaled_box(row, scale), "name": name or "Unknown", "pose": face.pose_of(row)}
+        if emp_id:
+            det["employeeId"] = emp_id
+            if hub.note_match(company, emp_id, me.get("repeatSeconds")):
+                result = hub.send_sighting(key, company, emp_id, score)
+                events.append({"employeeId": emp_id, "name": name, **result})
+            last = hub.last_result(company, emp_id)
+            det["onDuty"] = bool(last and (last.get("day") or {}).get("onDuty"))
+        detections.append(det)
+    return {"detections": detections, "events": events}
+
 
 @app.post("/api/process_frame")
-async def api_process_frame(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def process_frame(request: Request, file: UploadFile = File(...)):
+    """Detection only, for the 360° registration scan: where the face is and how it is turned."""
     try:
-        contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if frame is None: return {"detections": []}
-        
-        detections = []
-        # Run process_frame WITHOUT recognition (detection only)
-        process_frame(frame, db, detections_list=detections, recognition=False)
-        
-        return {"detections": detections}
-    except Exception as e:
-        print(f"API Process Frame Error: {e}")
-        return {"detections": [], "error": str(e)}
+        hub.whoami(_key(request))
+    except hub.BackendError as e:
+        return _refuse(e)
+    img = face.decode_image(file.file.read())
+    if img is None:
+        return {"detections": []}
+    _, rows, scale = face.detect(img)
+    return {"detections": [{"box": _scaled_box(r, scale), "pose": face.pose_of(r)} for r in rows]}
 
-if __name__ == "__main__": 
+
+@app.post("/api/enroll")
+def enroll(request: Request, employee_id: str = Form(...), photo: List[UploadFile] = File(...)):
+    """
+    Register one employee's face. The photos are turned into face numbers here,
+    in memory, and only the numbers (plus one small picture for the admin) go to
+    the backend. Nothing is written to this server's disk.
+    """
+    key = _key(request)
+    try:
+        me = hub.whoami(key)
+    except hub.BackendError as e:
+        return _refuse(e)
+
+    vectors, thumb_src = [], None
+    for p in photo[:12]:
+        vec, src = face.encode_photo(p.file.read())
+        if vec is not None:
+            vectors.append(vec)
+            thumb_src = thumb_src or src
+    if not vectors:
+        return JSONResponse(status_code=400, content={"message": "No face was found in the photos. Try again, facing the camera in good light."})
+
+    jpg = face.thumbnail_jpeg(thumb_src)
+    thumb = "data:image/jpeg;base64," + base64.b64encode(jpg).decode() if jpg else None
+    try:
+        saved = hub.save_face(key, request.headers.get("x-enroll-grant"), employee_id, vectors, thumb)
+    except hub.BackendError as e:
+        return JSONResponse(status_code=e.status, content=e.body)
+    except Exception:
+        return JSONResponse(status_code=503, content={"message": "Cannot reach the B.O.T server. The face was not saved."})
+    hub.drop_faces(me["company"]["_id"])
+    hub.forget_key(key)  # next frame re-reads the faces version
+    return {"ok": True, "scans": len(vectors), "employee": saved.get("employee")}
+
+
+@app.get("/api/status")
+def status(request: Request):
+    """For the kiosk page's footer: is this kiosk set up, and is anything waiting to be sent."""
+    try:
+        me = hub.whoami(_key(request))
+    except hub.BackendError as e:
+        return _refuse(e)
+    return {"company": me.get("company"), "kiosk": me.get("kiosk"), "waitingToSend": hub.outbox_size()}
+
+
+if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000, ssl_keyfile="certs/key.pem", ssl_certfile="certs/cert.pem")
