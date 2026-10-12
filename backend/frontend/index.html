@@ -1228,15 +1228,21 @@
                 </form>
 
                 <form id="login-kiosk-form" style="display:none;">
+                    <div id="login-kiosk-existing" style="display:none; margin-bottom:18px;">
+                        <label class="login-otp-label">Use an existing kiosk</label>
+                        <div id="login-kiosk-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+                        <p class="login-trust-line" style="margin:10px 0 4px;">or set this tablet up as a new kiosk:</p>
+                    </div>
                     <label class="login-otp-label">Name this kiosk</label>
                     <div class="login-phone-wrap" style="margin-bottom:12px;">
                         <span class="login-phone-prefix">📍</span>
                         <input id="login-kiosk-name" class="login-phone-input" type="text" maxlength="60"
                             placeholder="Reception" value="Reception" autocomplete="off">
                     </div>
-                    <p class="login-trust-line" style="margin-bottom:18px;">This device gets its own kiosk key. It can
-                        record faces and register them, but cannot open your admin panel. You can switch it off any time
-                        from Biometric devices in the admin panel.</p>
+                    <p class="login-trust-line" style="margin-bottom:18px;">The name says where this tablet stands, so you can
+                        tell your kiosks apart. See them all, and switch one off, under Biometric Device → Face kiosks in
+                        the admin panel. This tablet stays signed in (180 days) unless its browser data is cleared, for
+                        example in a private / incognito window.</p>
                     <button type="submit" class="login-btn" id="login-kiosk-btn"><span
                             id="login-kiosk-btn-label">Set up this kiosk</span></button>
                 </form>
@@ -1627,30 +1633,65 @@
         let pendingAdminToken = null;
         let pendingCompany = '';
 
+        // The company's kiosks that are on, so a tablet signing in again (a
+        // cleared browser, a private window) goes back to its own kiosk instead
+        // of adding a new one each time.
+        async function loadExistingKiosks() {
+            const box = document.getElementById('login-kiosk-existing');
+            const list = document.getElementById('login-kiosk-list');
+            box.style.display = 'none';
+            list.innerHTML = '';
+            if (!pendingAdminToken) return;
+            let kiosks = [];
+            try {
+                const res = await fetch(`${NODE_API_URL}/api/lens/kiosks`, { headers: { Authorization: `Bearer ${pendingAdminToken}` }, cache: 'no-store' });
+                if (res.ok) kiosks = await res.json();
+            } catch { /* the name field still works */ }
+            if (!Array.isArray(kiosks) || kiosks.length === 0) return;
+            const when = (d) => d ? new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : 'never';
+            kiosks.forEach((k) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'login-btn';
+                b.style.cssText = 'background:#fff; color:#3b0a2a; border:1px solid #e9d5e3; box-shadow:none; text-align:left; padding:12px 16px;';
+                b.innerHTML = `<strong></strong><br><small style="opacity:0.65; font-weight:500;"></small>`;
+                b.querySelector('strong').textContent = '📍 ' + k.name;
+                b.querySelector('small').textContent = 'Last used ' + when(k.lastSeenAt);
+                b.onclick = () => setUpKiosk({ kioskId: k._id }, k.name);
+                list.appendChild(b);
+            });
+            box.style.display = 'block';
+        }
+
         document.getElementById('login-kiosk-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             loginError('');
             const name = document.getElementById('login-kiosk-name').value.trim();
             if (!name) { loginError('Give this kiosk a name, for example "Reception".'); return; }
+            setUpKiosk({ name }, name);
+        });
+
+        async function setUpKiosk(body, name) {
             if (!pendingAdminToken) { loginError('Please sign in again.'); return; }
             setBtnLoading('login-kiosk-btn', 'login-kiosk-btn-label', true, 'Setting up…', 'Set up this kiosk');
             try {
                 const res = await fetch(`${NODE_API_URL}/api/lens/kiosks`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pendingAdminToken}` },
-                    body: JSON.stringify({ name }),
+                    body: JSON.stringify(body),
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.message || 'Could not set up this kiosk');
                 pendingAdminToken = null;
                 setSession({ key: data.key, kioskName: data.kiosk?.name || name, companyName: pendingCompany, setUpAt: Date.now() });
                 showApp();
+                toast(data.reused ? `Signed in as kiosk "${data.kiosk?.name || name}"` : `New kiosk "${data.kiosk?.name || name}" set up`);
             } catch (err) {
                 loginError(err.message);
             } finally {
                 setBtnLoading('login-kiosk-btn', 'login-kiosk-btn-label', false, '', 'Set up this kiosk');
             }
-        });
+        }
 
         function otpBoxes() { return Array.from(document.querySelectorAll('.login-otp-digit')); }
 
@@ -1751,8 +1792,9 @@
                 pendingCompany = data.companyName || data.name || '';
                 document.getElementById('login-otp-form').style.display = 'none';
                 document.getElementById('login-kiosk-form').style.display = 'block';
-                document.getElementById('login-subtitle').textContent = 'One last step: give this kiosk a name';
+                document.getElementById('login-subtitle').textContent = 'One last step: pick this kiosk, or name a new one';
                 document.getElementById('login-kiosk-name').focus();
+                loadExistingKiosks();
             } catch (err) {
                 loginError(err.message);
                 const row = document.getElementById('login-otp-row');
