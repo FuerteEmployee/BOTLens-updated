@@ -2368,8 +2368,13 @@
                 startLive();
             } else if (ev.reason === 'refused') {
                 toast(`${who}: ${ev.message}`, true);
+            } else if (ev.reason === 'near_punch' || ev.reason === 'debounced') {
+                // Too soon after their last punch (phone, machine or this camera): say when it was
+                // and when the next one counts. Shown once: the kiosk waits retryAfterSec before
+                // sending this person again.
+                toast(`${who}: ${ev.message}`);
             }
-            // 'debounced' / 'duplicate': the person is still in front of the camera, nothing to say.
+            // 'duplicate': the same sighting sent twice, nothing to say.
         }
 
         let isProcessing = false;
