@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 import engine as face  # noqa: E402
 import hub  # noqa: E402
+import liveness  # noqa: E402
 from database import Base, engine as db_engine  # noqa: E402
 import models  # noqa: E402,F401  (registers the outbox table)
 
@@ -124,9 +125,16 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
         return JSONResponse(status_code=400, content={"message": "The camera frame could not be read."})
 
     company = str(me["company"]["_id"])
+    kiosk = str((me.get("kiosk") or {}).get("_id") or company)
     known = hub.faces_for(key, me)
     work, rows, scale = face.detect(img)
     detections, events = [], []
+    # The person in front: the biggest face. The photo check (liveness.py)
+    # follows only them.
+    primary = max(rows, key=lambda r: float(r[2]) * float(r[3])) if rows else None
+    challenge, expired = liveness.current(kiosk)
+    if expired:
+        hub.release(company, expired["emp_id"])
     for row in rows:
         emp_id, name, score, why = (None, None, 0.0, "unknown")
         pose = face.pose_of(row)
@@ -142,11 +150,45 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
             emp_id, name, score, why = face.best_match(face.embed(work, row), known)
             hint = "matched" if emp_id else why
         det = {"box": _scaled_box(row, scale), "name": name or "Unknown", "pose": pose, "hint": hint}
+
+        # A photo check in progress for the person in front.
+        if challenge and row is primary:
+            det["name"] = challenge["name"]
+            det["challenge"] = challenge["direction"]
+            if challenge["stage"] == "turn":
+                if liveness.turned_enough(challenge, row):
+                    challenge["stage"] = "back"
+                    det["hint"] = "turn_back"
+                else:
+                    det["hint"] = "turn_" + challenge["direction"]
+                detections.append(det)
+                continue
+            # stage "back": straight on again, and still the same person
+            if emp_id == challenge["emp_id"]:
+                liveness.clear(kiosk)
+                result = hub.send_sighting(key, company, emp_id, challenge["score"])
+                events.append({"employeeId": emp_id, "name": name, **result})
+                challenge = None
+            else:
+                det["hint"] = "turn_back"
+                detections.append(det)
+                continue
+        elif expired and row is primary and not emp_id:
+            det["hint"] = "liveness_retry"
+
         if emp_id:
             det["employeeId"] = emp_id
-            if hub.note_match(company, emp_id, me.get("repeatSeconds")):
-                result = hub.send_sighting(key, company, emp_id, score)
-                events.append({"employeeId": emp_id, "name": name, **result})
+            if not challenge and hub.note_match(company, emp_id, me.get("repeatSeconds")):
+                if liveness.ENABLED and row is primary:
+                    # Recognised: before punching, make sure it is a real head and not a photo.
+                    challenge = liveness.start(kiosk, emp_id, name, score, row)
+                    det["hint"] = "turn_" + challenge["direction"]
+                    det["challenge"] = challenge["direction"]
+                elif liveness.ENABLED:
+                    hub.release(company, emp_id)  # someone in the background: wait until they are in front
+                else:
+                    result = hub.send_sighting(key, company, emp_id, score)
+                    events.append({"employeeId": emp_id, "name": name, **result})
             last = hub.last_result(company, emp_id)
             det["onDuty"] = bool(last and (last.get("day") or {}).get("onDuty"))
         detections.append(det)

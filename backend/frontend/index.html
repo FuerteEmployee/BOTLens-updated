@@ -2560,6 +2560,10 @@
 
         // What to tell a person the kiosk cannot match yet.
         const HINT_WORDS = {
+            turn_left: '← Turn left',
+            turn_right: 'Turn right →',
+            turn_back: 'Look straight',
+            liveness_retry: 'Try again',
             come_closer: 'Come closer',
             look_at_camera: 'Look at the camera',
             unsure: 'Hold still…',
@@ -2571,8 +2575,15 @@
             if (!g) return;
             let text = 'Stand in front of the camera';
             if (dets.length) {
-                const d = dets.find(x => x.employeeId) || dets[0];
-                text = d.employeeId ? `Hello ${d.name}` : ({
+                const d = dets.find(x => x.challenge) || dets.find(x => x.employeeId) || dets[0];
+                const who = d.name && d.name !== 'Unknown' ? `${d.name}, ` : '';
+                // The photo check (a real head turns, a photo does not). The picture
+                // is shown mirrored, so the person's left is the left of the screen.
+                if (d.hint === 'turn_left') text = `${who}turn your head slightly to your LEFT  ←`;
+                else if (d.hint === 'turn_right') text = `${who}turn your head slightly to your RIGHT  →`;
+                else if (d.hint === 'turn_back') text = `Good. Now look straight at the camera`;
+                else if (d.hint === 'liveness_retry') text = 'Too slow. Look at the camera to try again';
+                else text = d.employeeId ? `Hello ${d.name}` : ({
                     come_closer: 'Please come a little closer',
                     look_at_camera: 'Please look straight at the camera',
                     unsure: 'Hold still for a moment',
@@ -2661,7 +2672,7 @@
                         octx.strokeStyle = color;
                         octx.lineWidth = 4;
                         octx.strokeRect(x, y, w, h);
-                        const label = known ? d.name : (HINT_WORDS[d.hint] || 'Not registered');
+                        const label = d.challenge ? `${d.name} · ${HINT_WORDS[d.hint] || ''}` : (known ? d.name : (HINT_WORDS[d.hint] || 'Not registered'));
                         octx.font = 'bold 22px Arial';
                         const tw = octx.measureText(label).width;
                         const ly = Math.max(28, y - 10);

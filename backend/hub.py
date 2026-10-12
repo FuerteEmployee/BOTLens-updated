@@ -157,6 +157,16 @@ def note_match(company, emp_id, repeat_seconds):
         return True
 
 
+def release(company, emp_id):
+    """Forget that a sighting is on its way (it was not sent): the next frames may try again."""
+    with _seen_lock:
+        s = _seen.get((str(company), str(emp_id)))
+        if s:
+            s["inflight"] = False
+            s["next_ok"] = 0.0
+            s["hits"] = []
+
+
 def last_result(company, emp_id):
     with _seen_lock:
         s = _seen.get((str(company), str(emp_id)))
