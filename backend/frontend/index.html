@@ -2259,10 +2259,10 @@
                 vCont.classList.remove('scan-fullscreen-mode');
                 if (overlay) overlay.style.display = 'none';
                 ok.style.display = 'block';
-                document.getElementById('snap-ok-text').textContent = `✓ 360° Scan Successful (${snapBlobs.length} Angles)`;
+                document.getElementById('snap-ok-text').textContent = `✓ 360° Scan Successful (${snapBlobs.length} Angles). Saving...`;
                 controls.style.opacity = '1';
                 controls.style.pointerEvents = 'auto';
-                toast("Registration Ready!");
+                await saveFace();
             } catch (err) {
                 console.error(err);
                 is360Scanning = false;
@@ -2275,8 +2275,19 @@
             }
         }
 
-        document.getElementById('add-form').onsubmit = async (e) => {
+        // A save waiting for the BOTLens email/password: once confirmed, it goes ahead by itself.
+        let saveAfterGrant = false;
+
+        document.getElementById('add-form').onsubmit = (e) => {
             e.preventDefault();
+            saveFace();
+        };
+
+        // Save the scanned face. Runs by itself when a 360° scan finishes: on a
+        // phone the Save Face button sat below the screen after a scan, so a
+        // finished scan looked done while nothing had been saved (12 Oct: two of
+        // three faces scanned on an iPhone were never sent).
+        async function saveFace() {
             const id = document.getElementById('emp-select').value;
             if (!id) return toast('Select an employee first', true);
             const person = roster.find(x => x._id === id);
@@ -2284,7 +2295,7 @@
             if (!hasNewPhoto) {
                 return toast(person?.hasFace && !photoCaptureActive ? 'Nothing to save. Tap "Scan again" to replace the face.' : 'Scan the face first', true);
             }
-            if (!hasGrant()) return askForGrant();
+            if (!hasGrant()) { saveAfterGrant = true; return askForGrant(); }
 
             const fd = new FormData();
             fd.append('employee_id', id);
@@ -2295,14 +2306,15 @@
             btn.disabled = true; btn.textContent = 'Saving...';
             try {
                 const data = await kioskApi('/api/enroll', fd, { 'x-enroll-grant': enrollGrant });
-                toast(`${person?.name || 'Face'} saved (${data.scans} scan${data.scans === 1 ? '' : 's'})`);
+                toast(`✓ ${person?.name || 'Face'} saved (${data.scans} scan${data.scans === 1 ? '' : 's'}). Pick the next employee.`);
                 await loadEditEmployeesTab();
             } catch (err) {
-                if (err.status === 401 && !err.handled) askForGrant();
-                else if (!err.handled) toast(err.message || 'Save failed', true);
+                if (err.status === 401 && !err.handled) { saveAfterGrant = true; askForGrant(); }
+                else if (!err.handled) toast(`${person?.name || 'Face'} NOT saved: ${err.message || 'Save failed'}`, true);
+                document.getElementById('btn-reg').scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
             btn.disabled = false; btn.textContent = 'Save Face';
-        };
+        }
 
         function askForGrant() {
             document.getElementById('add-auth-email').value = '';
@@ -2322,6 +2334,7 @@
         }
 
         function cancelAddEmployeeAuth() {
+            saveAfterGrant = false;
             document.getElementById('add-employee-auth-modal').style.display = 'none';
             showTab('live', startLive);
         }
@@ -2339,6 +2352,7 @@
                 enrollGrant = data.grant;
                 enrollGrantUntil = Date.now() + (data.expiresInSec || 900) * 1000;
                 document.getElementById('add-employee-auth-modal').style.display = 'none';
+                if (saveAfterGrant) { saveAfterGrant = false; saveFace(); }
             } catch (err) {
                 errEl.textContent = err.message;
                 errEl.style.display = 'block';
