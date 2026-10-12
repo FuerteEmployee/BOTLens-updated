@@ -165,7 +165,10 @@
             padding: 5px;
         }
 
-        #local-v, #reg-v, #overlay-c {
+        /* Selfie view: the camera picture is shown mirrored. The overlay with the
+           names is NOT mirrored by CSS (that mirrored the text on some phones);
+           its boxes are mirrored in the drawing code instead. */
+        #local-v, #reg-v {
             transform: scaleX(-1);
         }
 
@@ -2650,7 +2653,9 @@
                     octx.clearRect(0, 0, overlay.width, overlay.height);
                     const dets = data.detections || [];
                     dets.forEach(d => {
-                        const [x, y, w, h] = d.box || [0, 0, 0, 0];
+                        const [bx, y, w, h] = d.box || [0, 0, 0, 0];
+                        // Mirror the box to match the mirrored camera picture.
+                        const x = overlay.width - bx - w;
                         const known = !!d.employeeId;
                         const color = known ? (d.onDuty ? '#00ff00' : '#ffb020') : (d.hint === 'unknown' ? '#9ca3af' : '#38bdf8');
                         octx.strokeStyle = color;
@@ -2660,16 +2665,11 @@
                         octx.font = 'bold 22px Arial';
                         const tw = octx.measureText(label).width;
                         const ly = Math.max(28, y - 10);
-                        // The camera view is shown mirrored (selfie view, CSS scaleX(-1)),
-                        // which also mirrored the names. Draw the label mirrored back so it
-                        // reads normally, starting at the box's left edge as seen on screen.
-                        octx.save();
-                        octx.scale(-1, 1);
+                        // Plain left-to-right text: the overlay itself is not mirrored.
                         octx.fillStyle = 'rgba(0,0,0,0.65)';
-                        octx.fillRect(-(x + w) - 4, ly - 24, tw + 8, 30);
+                        octx.fillRect(x - 4, ly - 24, tw + 8, 30);
                         octx.fillStyle = color;
-                        octx.fillText(label, -(x + w), ly);
-                        octx.restore();
+                        octx.fillText(label, x, ly);
                     });
                     setLiveGuide(dets);
                     (data.events || []).forEach(showSighting);
