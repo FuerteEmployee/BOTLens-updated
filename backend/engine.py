@@ -10,7 +10,9 @@ numbers into "best match".
 Models (backend/models/): YuNet face detector + SFace recognizer, OpenCV's own.
 An SFace vector is 128 floats; two faces match by cosine similarity.
 """
+import math
 import os
+import threading
 
 import cv2
 import numpy as np
@@ -32,6 +34,14 @@ if not (os.path.exists(_det_path) and os.path.exists(_rec_path)):
 
 _detector = cv2.FaceDetectorYN.create(_det_path, "", (320, 320), 0.6, 0.3, 5000)
 _recognizer = cv2.FaceRecognizerSF.create(_rec_path, "")
+
+# One detector and one recognizer serve every request, and FastAPI runs each
+# request on its own thread. YuNet's input size is per-object state: two
+# frames of different sizes at once (a live frame and a 360° scan frame, or two
+# kiosks) set it under each other, and OpenCV then failed with
+# "buf.shape() == m.shape()" or returned boxes of infinity (316 such errors on
+# the staging kiosk, 12 Oct). Every use goes through this lock.
+_cv_lock = threading.Lock()
 print(f"--- Face models loaded from {_models_dir} ---")
 
 
@@ -52,15 +62,18 @@ def detect(img):
         scale = 0.5
     else:
         scale = 1.0
-    _detector.setInputSize((w, h))
-    _, faces = _detector.detect(img)
-    return img, ([] if faces is None else list(faces)), scale
+    with _cv_lock:
+        _detector.setInputSize((w, h))
+        _, faces = _detector.detect(img)
+    rows = [] if faces is None else [f for f in faces if all(math.isfinite(float(v)) for v in f[:15])]
+    return img, rows, scale
 
 
 def embed(img, face_row):
     """128-value SFace vector for one detected face."""
-    aligned = _recognizer.alignCrop(img, face_row)
-    return _recognizer.feature(aligned)[0]
+    with _cv_lock:
+        aligned = _recognizer.alignCrop(img, face_row)
+        return _recognizer.feature(aligned)[0].copy()
 
 
 def encode_photo(data: bytes):
@@ -72,15 +85,24 @@ def encode_photo(data: bytes):
     img = decode_image(data)
     if img is None:
         return None, None
+    # A phone photo can be 4000 px wide; detecting on it would hold the shared
+    # lock (and pause recognition on every kiosk) far longer than needed.
+    h, w = img.shape[:2]
+    if max(h, w) > 1280:
+        s = 1280 / max(h, w)
+        img = cv2.resize(img, (0, 0), fx=s, fy=s)
     for attempt in (img, None):
         if attempt is None:
             h, w = img.shape[:2]
             s = 640 / max(h, w)
             attempt = cv2.resize(img, (0, 0), fx=s, fy=s)
         h, w = attempt.shape[:2]
-        _detector.setInputSize((w, h))
-        _, faces = _detector.detect(attempt)
-        if faces is not None and len(faces) > 0:
+        with _cv_lock:
+            _detector.setInputSize((w, h))
+            _, faces = _detector.detect(attempt)
+        if faces is not None:
+            faces = [f for f in faces if all(math.isfinite(float(v)) for v in f[:15])]
+        if faces:
             best = max(faces, key=lambda f: f[2] * f[3])
             return embed(attempt, best), (attempt, best)
     return None, None
@@ -113,7 +135,8 @@ def best_match(vector, faces):
     best_id, best_name, best_score = None, None, -1.0
     for emp_id, name, vectors in faces:
         for target in vectors:
-            score = float(_recognizer.match(vector, target, cv2.FaceRecognizerSF_FR_COSINE))
+            with _cv_lock:
+                score = float(_recognizer.match(vector, target, cv2.FaceRecognizerSF_FR_COSINE))
             if score > best_score:
                 best_id, best_name, best_score = emp_id, name, score
     if best_score >= MATCH_THRESHOLD:

@@ -1381,6 +1381,7 @@
         <div id="view-add" class="tab-content">
             <div class="glass-form">
                 <h2 class="mb-4">Register Faces</h2>
+                <div id="reg-saved-banner" role="status" style="display:none; margin-bottom:16px; padding:12px 14px; border-radius:12px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.45); color:#34d399; font-weight:700;"></div>
                 <form id="add-form">
                     <div class="form-row">
                         <div class="form-group">
@@ -1423,7 +1424,7 @@
                                             style="width:12px; height:12px; border-radius:50%; background:#db2777; box-shadow: 0 0 10px #db2777; animation: pulseAnim 1.5s infinite;">
                                         </div>
                                         <h3 style="margin:0; font-size:1.1rem; letter-spacing:1px; font-weight:800;">360°
-                                            FACE SCAN</h3>
+                                            FACE SCAN<span id="scan-who" style="display:block; font-size:0.85rem; letter-spacing:0; font-weight:600; opacity:0.85;"></span></h3>
                                     </div>
                                     <button type="button" onclick="stop360Scan()"
                                         style="background:rgba(255,255,255,0.1); border:none; color:#fff; width:35px; height:35px; border-radius:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:0.3s;">✕</button>
@@ -1544,8 +1545,16 @@
             loginError(message || 'This kiosk needs to be set up again. Ask your admin to sign in.');
         }
 
+        // 401 codes that mean the kiosk key itself is no good. Anything else with
+        // 401 (a wrong BOTLens password, a face-change grant that ran out) is a
+        // question for the person at the kiosk, not a reason to sign the whole
+        // kiosk out: that used to stop every punch until an admin signed in again.
+        const KIOSK_KEY_CODES = ['kiosk_key_missing', 'kiosk_key_invalid', 'kiosk_switched_off', 'company_inactive'];
+
         async function handleAuthFailure(res, data) {
-            if (res.status === 401) { kioskSignedOut(data?.message); return true; }
+            if (res.status === 401 && (KIOSK_KEY_CODES.includes(data?.code) || (!data?.code && !res.__grantCall))) {
+                kioskSignedOut(data?.message); return true;
+            }
             if (res.status === 403 && data?.code === 'frozen_tenant') { kioskSignedOut(data.message); return true; }
             if (res.status === 403 && data?.subscriptionStatus) { showSubscriptionBlock(data.subscriptionStatus); return true; }
             return false;
@@ -1560,6 +1569,8 @@
             });
             let data = null; try { data = await res.json(); } catch { }
             if (!res.ok) {
+                // The BOTLens email/password check answers a wrong password with a plain 401.
+                if (path === '/enroll-grant') res.__grantCall = true;
                 const handled = await handleAuthFailure(res, data);
                 const err = new Error(data?.message || 'Request failed'); err.status = res.status; err.code = data?.code; err.handled = handled;
                 throw err;
@@ -1573,7 +1584,7 @@
             let data = null; try { data = await res.json(); } catch { }
             if (!res.ok) {
                 const handled = await handleAuthFailure(res, data);
-                const err = new Error(data?.message || 'Request failed'); err.status = res.status; err.handled = handled;
+                const err = new Error(data?.message || 'Request failed'); err.status = res.status; err.code = data?.code; err.handled = handled;
                 throw err;
             }
             return data;
@@ -1814,10 +1825,15 @@
         let enrollGrantUntil = 0;
         const hasGrant = () => enrollGrant && Date.now() < enrollGrantUntil - 5000;
 
+        // Only the register camera. A save finishing after the admin went back to
+        // Live View used to stop the live camera here, and the kiosk then looked
+        // alive while it recognised nobody.
         function stopRegCam() {
-            if (localStream) {
+            const regV = document.getElementById('reg-v');
+            if (localStream && regV && regV.srcObject === localStream) {
                 localStream.getTracks().forEach(t => t.stop());
                 localStream = null;
+                regV.srcObject = null;
             }
         }
 
@@ -1826,6 +1842,26 @@
             document.getElementById('upload-preview').style.display = 'none';
             snapBlob = null;
             snapBlobs = [];
+            refreshSaveButton();
+        }
+
+        // "Save Face" only when there is something new to save: a single photo
+        // or an uploaded file. A 360° scan saves by itself, and a person whose
+        // face is already registered has nothing to save until "Scan again".
+        // Pressing a Save that had nothing behind it answered "Nothing to save",
+        // which read as the save failing (12 Oct).
+        function refreshSaveButton() {
+            const btn = document.getElementById('btn-reg');
+            if (!btn) return;
+            const hasPhoto = snapBlobs.length > 0 || !!snapBlob;
+            btn.style.display = photoCaptureActive && hasPhoto ? '' : 'none';
+        }
+
+        function showSavedBanner(text) {
+            const b = document.getElementById('reg-saved-banner');
+            if (!b) return;
+            b.textContent = text || '';
+            b.style.display = text ? 'block' : 'none';
         }
 
         async function loadEditEmployeesTab() {
@@ -1846,6 +1882,7 @@
 
         function onEmpSelectChange() {
             const id = document.getElementById('emp-select').value;
+            if (id) showSavedBanner('');
             resetEmployeeForm();
             stopRegCam();
 
@@ -1875,6 +1912,7 @@
                 photoCaptureActive = true;
                 setPhotoSource('cam');
             }
+            refreshSaveButton();
         }
 
         function startPhotoChange() {
@@ -1882,19 +1920,23 @@
             document.getElementById('photo-capture-block').style.display = 'block';
             photoCaptureActive = true;
             setPhotoSource('cam');
+            refreshSaveButton();
         }
 
-        async function removeFace() {
-            const id = document.getElementById('emp-select').value;
+        let removeAfterGrant = null; // employee id whose removal waits for the BOTLens email/password
+        async function removeFace(confirmedId) {
+            const id = confirmedId || document.getElementById('emp-select').value;
             const person = roster.find(e => e._id === id);
-            if (!person || !confirm(`Remove ${person.name}'s face? This kiosk will stop recognising them until they are scanned again.`)) return;
-            if (!hasGrant()) return askForGrant();
+            if (!person) return;
+            if (!confirmedId && !confirm(`Remove ${person.name}'s face? Every kiosk will stop recognising them until they are scanned again.`)) return;
+            if (!hasGrant()) { removeAfterGrant = id; return askForGrant(); }
             try {
                 await lensApi(`/faces/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'x-enroll-grant': enrollGrant } });
-                toast('Face removed');
+                toast(`${person.name}'s face removed`);
+                showSavedBanner(`✓ ${person.name}'s face removed.`);
                 await loadEditEmployeesTab();
             } catch (err) {
-                if (err.code === 'enroll_grant_needed') return askForGrant();
+                if (err.code === 'enroll_grant_needed') { removeAfterGrant = id; return askForGrant(); }
                 if (!err.handled) toast(err.message, true);
             }
         }
@@ -1910,6 +1952,9 @@
             // Close sidebar if open
             const sidebar = document.getElementById('sidebar');
             if (sidebar.classList.contains('open')) toggleSidebar();
+
+            // A scan in progress belongs to the Register tab: leaving it cancels the scan.
+            if (is360Scanning) cancelScan();
 
             // Stop existing camera/loop immediately before switching
             if (localStream) {
@@ -2050,16 +2095,21 @@
         async function snapFromLocal() {
             const v = document.getElementById('reg-v');
             const c = document.getElementById('reg-c');
+            if (!v.videoWidth) return toast('Camera not ready yet. Wait a moment and tap Photo again.', true);
             c.width = v.videoWidth; c.height = v.videoHeight;
             c.getContext('2d').drawImage(v, 0, 0);
             c.toBlob(b => {
+                if (!b) return toast('Could not take the photo. Tap Photo again.', true);
                 snapBlob = b;
                 snapBlobs = []; // Clear 360 list
                 document.getElementById('scan-gallery').innerHTML = ''; // Clear gallery
                 const snapOk = document.getElementById('snap-ok');
                 snapOk.style.display = 'block';
-                document.getElementById('snap-ok-text').textContent = '✓ Photo Captured';
-                toast('Photo Captured!');
+                document.getElementById('snap-ok-text').style.color = '';
+                document.getElementById('snap-ok-text').textContent = '✓ Photo Captured. Tap Save Face.';
+                refreshSaveButton();
+                document.getElementById('btn-reg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                toast('Photo captured. Tap Save Face.');
             }, 'image/jpeg');
         }
 
@@ -2072,6 +2122,7 @@
             // Clean up when switching
             document.getElementById('snap-ok').style.display = 'none';
             snapBlob = null;
+            refreshSaveButton();
 
             if (src === 'upload' && localStream) {
                 localStream.getTracks().forEach(t => t.stop());
@@ -2093,6 +2144,7 @@
 
             snapBlob = file;
             snapBlobs = []; // Clear 360 scan if manual upload
+            refreshSaveButton();
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = document.getElementById('upload-preview');
@@ -2100,8 +2152,11 @@
                 img.style.display = 'block';
                 const snapOk = document.getElementById('snap-ok');
                 snapOk.style.display = 'block';
-                snapOk.textContent = '✓ Photo Uploaded';
-                toast('Photo Uploaded!');
+                const t = document.getElementById('snap-ok-text');
+                t.style.color = '';
+                t.textContent = '✓ Photo Uploaded. Tap Save Face.';
+                document.getElementById('scan-gallery').innerHTML = '';
+                toast('Photo uploaded. Tap Save Face.');
             };
             reader.readAsDataURL(file);
         }
@@ -2109,8 +2164,20 @@
         let currentPose = { yaw: "UNKNOWN", pitch: "UNKNOWN" };
 
         let is360Scanning = false;
-        function stop360Scan() {
+        // Each scan gets a number; a scan that was cancelled or replaced notices
+        // after every wait and stops, so it can never save. (Cancelling during
+        // the last step used to save the face anyway.)
+        let scanGen = 0;
+        function cancelScan() {
             is360Scanning = false;
+            scanGen++;
+            snapBlobs = [];
+            const g = document.getElementById('scan-gallery'); if (g) g.innerHTML = '';
+            const ok = document.getElementById('snap-ok'); if (ok) ok.style.display = 'none';
+            refreshSaveButton();
+        }
+        function stop360Scan() {
+            cancelScan();
             const vCont = document.getElementById('reg-v-cont');
             const overlay = document.getElementById('scan-overlay');
             const guide = document.getElementById('scan-guide');
@@ -2126,9 +2193,21 @@
         }
 
         async function start360Scan() {
+            const scanSel = document.getElementById('emp-select');
+            if (!scanSel.value) return toast('Select an employee first', true);
+            if (saveInFlight) return toast('Still saving the last face. One moment.', true);
+            const myScan = ++scanGen;
+            const live = () => is360Scanning && scanGen === myScan;
             is360Scanning = true;
             snapBlobs = [];
             snapBlob = null;
+            showSavedBanner('');
+            refreshSaveButton();
+            // Whose face this is, on the scan itself: after a save the list used
+            // to stay on the person just saved, and the next scan was saved to
+            // them again (12 Oct: three scans, all saved as Vijay).
+            const who = roster.find(x => x._id === scanSel.value);
+            document.getElementById('scan-who').textContent = who ? who.name : '';
             const vCont = document.getElementById('reg-v-cont');
             const overlay = document.getElementById('scan-overlay');
             vCont.classList.add('scan-fullscreen-mode');
@@ -2192,13 +2271,13 @@
                 
                 // Wait for the first valid detection before starting steps
                 while (currentPose.yaw === "UNKNOWN" || currentPose.yaw === "ERROR" || currentPose.yaw === "NONE") {
-                    if (!is360Scanning) return;
+                    if (!live()) return;
                     text.innerHTML = `WAITING FOR FACE...<br><small>Position your face in the circle</small>`;
                     await new Promise(r => setTimeout(r, 200));
                 }
 
                 for (let i = 0; i < steps.length; i++) {
-                    if (!is360Scanning) return;
+                    if (!live()) return;
                     const step = steps[i];
                     text.style.color = "#fff";
 
@@ -2206,7 +2285,7 @@
                     let waitStart = Date.now();
 
                     while (!poseMatched) {
-                        if (!is360Scanning) return;
+                        if (!live()) return;
                         // Check if pose matches targets
                         let match = true;
                         if (step.target.yaw && currentPose.yaw !== step.target.yaw) match = false;
@@ -2232,6 +2311,7 @@
 
                     text.innerHTML = `<span style="color:#00ff00; font-size:1.5rem;">READY!</span><br>STAY STILL...`;
                     await new Promise(r => setTimeout(r, 800));
+                    if (!live()) return;
 
                     // Capture high-res
                     const c_high = document.getElementById('reg-c');
@@ -2251,6 +2331,7 @@
                     text.textContent = "✓ OK";
                     text.style.color = "#00ff00";
                     await new Promise(r => setTimeout(r, 600));
+                    if (!live()) return;
                 }
 
                 poseRunning = false;
@@ -2259,9 +2340,12 @@
                 vCont.classList.remove('scan-fullscreen-mode');
                 if (overlay) overlay.style.display = 'none';
                 ok.style.display = 'block';
+                document.getElementById('snap-ok-text').style.color = '';
                 document.getElementById('snap-ok-text').textContent = `✓ 360° Scan Successful (${snapBlobs.length} Angles). Saving...`;
                 controls.style.opacity = '1';
                 controls.style.pointerEvents = 'auto';
+                refreshSaveButton(); // shown only if the save below cannot finish
+                if (scanGen !== myScan) return;
                 await saveFace();
             } catch (err) {
                 console.error(err);
@@ -2277,6 +2361,13 @@
 
         // A save waiting for the BOTLens email/password: once confirmed, it goes ahead by itself.
         let saveAfterGrant = false;
+        let saveInFlight = false;
+        const registerTabOpen = () => document.getElementById('view-add')?.classList.contains('active');
+        function lockRegisterControls(locked) {
+            const sel = document.getElementById('emp-select'); if (sel) sel.disabled = locked;
+            const c = document.getElementById('cam-controls');
+            if (c) { c.style.opacity = locked ? '0.5' : '1'; c.style.pointerEvents = locked ? 'none' : 'auto'; }
+        }
 
         document.getElementById('add-form').onsubmit = (e) => {
             e.preventDefault();
@@ -2295,6 +2386,7 @@
             if (!hasNewPhoto) {
                 return toast(person?.hasFace && !photoCaptureActive ? 'Nothing to save. Tap "Scan again" to replace the face.' : 'Scan the face first', true);
             }
+            if (saveInFlight) return;
             if (!hasGrant()) { saveAfterGrant = true; return askForGrant(); }
 
             const fd = new FormData();
@@ -2304,15 +2396,39 @@
 
             const btn = document.getElementById('btn-reg');
             btn.disabled = true; btn.textContent = 'Saving...';
+            saveInFlight = true;
+            lockRegisterControls(true);
+            const okText = document.getElementById('snap-ok-text');
             try {
                 const data = await kioskApi('/api/enroll', fd, { 'x-enroll-grant': enrollGrant });
-                toast(`✓ ${person?.name || 'Face'} saved (${data.scans} scan${data.scans === 1 ? '' : 's'}). Pick the next employee.`);
-                await loadEditEmployeesTab();
+                const savedMsg = `✓ ${person?.name || 'Face'} saved (${data.scans} angle${data.scans === 1 ? '' : 's'}). Choose the next employee from the list.`;
+                toast(savedMsg);
+                showSavedBanner(savedMsg);
+                saveInFlight = false;
+                lockRegisterControls(false);
+                // Back to "Select an employee", so the next scan cannot land on
+                // the person just saved. Only while Register is still open: a
+                // background save must not reset or stop anything elsewhere.
+                if (registerTabOpen()) {
+                    const sel = document.getElementById('emp-select');
+                    if (sel.value === id) sel.value = '';
+                    await loadEditEmployeesTab();
+                } else {
+                    snapBlobs = []; snapBlob = null;
+                }
             } catch (err) {
-                if (err.status === 401 && !err.handled) { saveAfterGrant = true; askForGrant(); }
-                else if (!err.handled) toast(`${person?.name || 'Face'} NOT saved: ${err.message || 'Save failed'}`, true);
+                saveInFlight = false;
+                lockRegisterControls(false);
+                if (err.code === 'enroll_grant_needed') { saveAfterGrant = true; askForGrant(); }
+                else if (!err.handled) {
+                    const msg = `${person?.name || 'Face'} NOT saved: ${err.message || 'Save failed'}. Tap Save Face to try again.`;
+                    toast(msg, true);
+                    if (okText) { okText.textContent = msg; okText.style.color = 'var(--danger)'; }
+                }
+                refreshSaveButton();
                 document.getElementById('btn-reg').scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+            saveInFlight = false;
             btn.disabled = false; btn.textContent = 'Save Face';
         }
 
@@ -2335,6 +2451,7 @@
 
         function cancelAddEmployeeAuth() {
             saveAfterGrant = false;
+            removeAfterGrant = null;
             document.getElementById('add-employee-auth-modal').style.display = 'none';
             showTab('live', startLive);
         }
@@ -2353,6 +2470,7 @@
                 enrollGrantUntil = Date.now() + (data.expiresInSec || 900) * 1000;
                 document.getElementById('add-employee-auth-modal').style.display = 'none';
                 if (saveAfterGrant) { saveAfterGrant = false; saveFace(); }
+                else if (removeAfterGrant) { const rid = removeAfterGrant; removeAfterGrant = null; removeFace(rid); }
             } catch (err) {
                 errEl.textContent = err.message;
                 errEl.style.display = 'block';
@@ -2397,7 +2515,15 @@
             if (subscriptionBlocked || !kioskKey()) { setTimeout(pushFrame, 1000); return; }
             const v = document.getElementById('local-v');
             const c = document.getElementById('local-c');
-            if (!v || !localStream || v.videoWidth === 0) {
+            const onLive = document.getElementById('view-live')?.classList.contains('active');
+            // Only the LIVE camera on the Live tab. With the Register camera on,
+            // local-v kept its last frozen picture and that was still being
+            // sent for recognition.
+            if (!v || !onLive || !localStream || v.srcObject !== localStream || v.videoWidth === 0) {
+                if (onLive && !localStream && !pushFrame.restarting) {
+                    pushFrame.restarting = true; // the live camera was lost: start it again
+                    startLocalCam('local-v').finally(() => { pushFrame.restarting = false; });
+                }
                 setTimeout(pushFrame, 500);
                 return;
             }
