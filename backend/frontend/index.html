@@ -1335,6 +1335,9 @@
                 <div id="frame-indicator"
                     style="position:absolute; bottom:15px; right:15px; background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:50px; font-size:11px; color:var(--accent); z-index:10;">
                     📡 Initializing...</div>
+                <div id="live-guide" aria-live="polite"
+                    style="position:absolute; left:50%; bottom:55px; transform:translateX(-50%); max-width:92%; background:rgba(0,0,0,0.65); color:#fff; padding:10px 18px; border-radius:14px; font-size:1.15rem; font-weight:700; text-align:center; z-index:10;">
+                    Stand in front of the camera</div>
                 <img id="live-img" style="display:none;">
                 <canvas id="local-c" style="display:none;"></canvas>
             </div>
@@ -2062,8 +2065,36 @@
             }
         }
 
+        // Tap or swipe a message away (they used to stay until they timed out).
+        function makeDismissable(el, hide) {
+            if (!el || el.__dismissable) return;
+            el.__dismissable = true;
+            let x0 = null, y0 = null;
+            el.addEventListener('touchstart', (e) => { const t = e.touches[0]; x0 = t.clientX; y0 = t.clientY; }, { passive: true });
+            el.addEventListener('touchmove', (e) => {
+                if (x0 === null) return;
+                const t = e.touches[0];
+                const dx = t.clientX - x0, dy = t.clientY - y0;
+                el.style.transition = 'none';
+                el.style.translate = Math.abs(dx) > Math.abs(dy) ? `${dx}px 0` : `0 ${Math.min(0, dy)}px`;
+                el.style.opacity = String(Math.max(0.2, 1 - (Math.abs(dx) + Math.abs(Math.min(0, dy))) / 250));
+            }, { passive: true });
+            el.addEventListener('touchend', (e) => {
+                if (x0 === null) return;
+                const t = e.changedTouches[0];
+                const dx = t.clientX - x0, dy = t.clientY - y0;
+                x0 = y0 = null;
+                el.style.transition = ''; el.style.translate = ''; el.style.opacity = '';
+                if (Math.abs(dx) > 60 || dy < -40) hide();
+            });
+            el.addEventListener('click', () => { if (!el.onclick) hide(); });
+        }
+        function hideToast() { const n = document.getElementById('notif'); n.classList.remove('show'); n.onclick = null; }
+        function hidePunchAlert() { document.getElementById('punch-alert').style.display = 'none'; }
+
         function toast(m, err = false, action = null, isPunch = false) {
             const n = document.getElementById('notif');
+            makeDismissable(n, hideToast);
             n.textContent = m;
             n.style.background = err ? 'var(--danger)' : 'var(--accent)';
             n.classList.add('show');
@@ -2401,7 +2432,10 @@
             const okText = document.getElementById('snap-ok-text');
             try {
                 const data = await kioskApi('/api/enroll', fd, { 'x-enroll-grant': enrollGrant });
-                const savedMsg = `✓ ${person?.name || 'Face'} saved (${data.scans} angle${data.scans === 1 ? '' : 's'}). Choose the next employee from the list.`;
+                let savedMsg = `✓ ${person?.name || 'Face'} saved (${data.scans} angle${data.scans === 1 ? '' : 's'}). Choose the next employee from the list.`;
+                if (data.similarTo?.name) {
+                    savedMsg += ` Note: this face looks close to ${data.similarTo.name}. If the kiosk mixes them up, scan both again in good light.`;
+                }
                 toast(savedMsg);
                 showSavedBanner(savedMsg);
                 saveInFlight = false;
@@ -2479,6 +2513,30 @@
             }
         }
 
+        // What to tell a person the kiosk cannot match yet.
+        const HINT_WORDS = {
+            come_closer: 'Come closer',
+            look_at_camera: 'Look at the camera',
+            unsure: 'Hold still…',
+            unknown: 'Not registered',
+        };
+        // One line under the camera saying what to do, in big letters.
+        function setLiveGuide(dets) {
+            const g = document.getElementById('live-guide');
+            if (!g) return;
+            let text = 'Stand in front of the camera';
+            if (dets.length) {
+                const d = dets.find(x => x.employeeId) || dets[0];
+                text = d.employeeId ? `Hello ${d.name}` : ({
+                    come_closer: 'Please come a little closer',
+                    look_at_camera: 'Please look straight at the camera',
+                    unsure: 'Hold still for a moment',
+                    unknown: 'Face not registered. Ask your admin.',
+                }[d.hint] || 'Look at the camera');
+            }
+            g.textContent = text;
+        }
+
         // Plain words for a sighting's result: the B.O.T server's own answer.
         const ACTION_TITLES = { 'punch-in': 'PUNCHED IN', 'punch-out': 'PUNCHED OUT', 'lunch-in': 'LUNCH STARTED', 'lunch-out': 'BACK FROM LUNCH' };
         function showSighting(ev) {
@@ -2486,6 +2544,7 @@
             if (ev.recorded && ev.action) {
                 document.getElementById('punch-sound').play().catch(() => { });
                 const alertEl = document.getElementById('punch-alert');
+                makeDismissable(alertEl, hidePunchAlert);
                 document.getElementById('alert-title').textContent = ACTION_TITLES[ev.action] || 'RECORDED';
                 document.getElementById('alert-msg').textContent = `${who} · ${ev.message || ''}`;
                 alertEl.style.display = 'block';
@@ -2547,17 +2606,30 @@
                     overlay.width = c.width;
                     overlay.height = c.height;
                     octx.clearRect(0, 0, overlay.width, overlay.height);
-                    (data.detections || []).forEach(d => {
+                    const dets = data.detections || [];
+                    dets.forEach(d => {
                         const [x, y, w, h] = d.box || [0, 0, 0, 0];
                         const known = !!d.employeeId;
-                        const color = !known ? '#9ca3af' : (d.onDuty ? '#00ff00' : '#ffb020');
+                        const color = known ? (d.onDuty ? '#00ff00' : '#ffb020') : (d.hint === 'unknown' ? '#9ca3af' : '#38bdf8');
                         octx.strokeStyle = color;
                         octx.lineWidth = 4;
                         octx.strokeRect(x, y, w, h);
+                        const label = known ? d.name : (HINT_WORDS[d.hint] || 'Not registered');
+                        octx.font = 'bold 22px Arial';
+                        const tw = octx.measureText(label).width;
+                        const ly = Math.max(28, y - 10);
+                        // The camera view is shown mirrored (selfie view, CSS scaleX(-1)),
+                        // which also mirrored the names. Draw the label mirrored back so it
+                        // reads normally, starting at the box's left edge as seen on screen.
+                        octx.save();
+                        octx.scale(-1, 1);
+                        octx.fillStyle = 'rgba(0,0,0,0.65)';
+                        octx.fillRect(-(x + w) - 4, ly - 24, tw + 8, 30);
                         octx.fillStyle = color;
-                        octx.font = 'bold 20px Arial';
-                        octx.fillText(known ? d.name : 'Not registered', x, Math.max(20, y - 10));
+                        octx.fillText(label, -(x + w), ly);
+                        octx.restore();
                     });
+                    setLiveGuide(dets);
                     (data.events || []).forEach(showSighting);
                     if (ind) { ind.textContent = '📡 Recognition on · ' + new Date().toLocaleTimeString(); ind.style.color = '#00ff00'; }
                 } catch (e) {

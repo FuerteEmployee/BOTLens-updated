@@ -18,9 +18,25 @@ import cv2
 import numpy as np
 
 MODEL_VERSION = "sface_2021dec"
-# SFace cosine threshold. 0.363 is OpenCV's published value; 0.42 is a little
-# stricter, chosen because a wrong match punches the wrong person.
-MATCH_THRESHOLD = float(os.getenv("LENS_MATCH_THRESHOLD", "0.42"))
+# How a person is scored, and when a match counts. Chosen on the registered
+# faces themselves (12 Oct, staging and production): with "best single angle
+# >= 0.42" an unregistered person's straight-on face was taken for someone
+# else in 3 of 6 cases (Aryan seen as Nihal before Aryan was registered).
+# Scoring a person as half their straight-on angle + half their best angle,
+# and requiring 0.45, took that to 0 of 6 (production 0 of 4) while every
+# registered person's straight-on face was still accepted as before.
+MATCH_THRESHOLD = float(os.getenv("LENS_MATCH_THRESHOLD", "0.45"))
+# Two registered people this close to each other for one face: say nothing
+# rather than guess. A wrong match punches the wrong person.
+MATCH_MARGIN = float(os.getenv("LENS_MATCH_MARGIN", "0.05"))
+# A face narrower than this (pixels in the camera frame) is too far away to
+# recognise reliably; the kiosk asks the person to come closer instead.
+MIN_FACE_PX = int(os.getenv("LENS_MIN_FACE_PX", "70"))
+# How far a head may be turned and still be matched: 0.5 is straight on (nose
+# between the eyes), 0.5 +/- this is allowed. Wider than the registration
+# scan's "LOOK CENTER" band, since people walk up to a kiosk at an angle;
+# a face in strong profile is where wrong matches come from.
+MAX_TURN = float(os.getenv("LENS_MAX_TURN", "0.22"))
 
 _models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 _det_path = os.path.join(_models_dir, "face_detection_yunet_2023mar.onnx")
@@ -126,22 +142,57 @@ def thumbnail_jpeg(crop_source):
     return buf.tobytes() if ok else None
 
 
+def _cosine(a, b):
+    with _cv_lock:
+        return float(_recognizer.match(a, b, cv2.FaceRecognizerSF_FR_COSINE))
+
+
+def person_score(vector, vectors):
+    """
+    How well `vector` matches one person's registered angles. The first angle
+    is the straight-on one (the scan starts with LOOK CENTER), and a kiosk
+    only matches straight-on faces, so it counts for half; the best of all
+    angles counts for the other half. The best angle alone let a stranger
+    match on one lucky side view.
+    """
+    if not vectors:
+        return -1.0
+    scores = [_cosine(vector, t) for t in vectors]
+    return 0.5 * scores[0] + 0.5 * max(scores)
+
+
+def rank(vector, faces):
+    """[(score, employee_id, name), ...] best first, one entry per person."""
+    out = [(person_score(vector, vectors), emp_id, name) for emp_id, name, vectors in faces]
+    out.sort(key=lambda x: x[0], reverse=True)
+    return out
+
+
 def best_match(vector, faces):
     """
-    The closest registered face to `vector`, among one company's faces only.
+    The registered person `vector` belongs to, among one company's faces only.
     `faces` is [(employee_id, name, [np.array, ...]), ...] (several angles each).
-    Returns (employee_id, name, score) above the threshold, else (None, None, score).
+    Returns (employee_id, name, score, reason). reason is "matched", or why
+    not: "unknown" (nobody close enough) or "unsure" (two people too close to
+    tell apart).
     """
-    best_id, best_name, best_score = None, None, -1.0
-    for emp_id, name, vectors in faces:
-        for target in vectors:
-            with _cv_lock:
-                score = float(_recognizer.match(vector, target, cv2.FaceRecognizerSF_FR_COSINE))
-            if score > best_score:
-                best_id, best_name, best_score = emp_id, name, score
-    if best_score >= MATCH_THRESHOLD:
-        return best_id, best_name, best_score
-    return None, None, best_score
+    ranked = rank(vector, faces)
+    if not ranked:
+        return None, None, 0.0, "unknown"
+    best_score, best_id, best_name = ranked[0]
+    if best_score < MATCH_THRESHOLD:
+        return None, None, best_score, "unknown"
+    if len(ranked) > 1 and best_score - ranked[1][0] < MATCH_MARGIN:
+        return None, None, best_score, "unsure"
+    return best_id, best_name, best_score, "matched"
+
+
+def face_width(face_row, scale=1.0):
+    """Face width in pixels of the frame the kiosk sent."""
+    try:
+        return float(face_row[2]) * scale
+    except Exception:
+        return 0.0
 
 
 def pose_of(face_row):

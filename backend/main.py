@@ -128,10 +128,20 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
     work, rows, scale = face.detect(img)
     detections, events = [], []
     for row in rows:
-        emp_id, name, score = (None, None, 0.0)
-        if known:
-            emp_id, name, score = face.best_match(face.embed(work, row), known)
-        det = {"box": _scaled_box(row, scale), "name": name or "Unknown", "pose": face.pose_of(row)}
+        emp_id, name, score, why = (None, None, 0.0, "unknown")
+        pose = face.pose_of(row)
+        # Only a near, straight-on face is matched: a small or turned face is
+        # where wrong matches come from. The kiosk tells the person what to do.
+        if face.face_width(row, scale) < face.MIN_FACE_PX:
+            hint = "come_closer"
+        elif isinstance(pose.get("rx"), (int, float)) and abs(pose["rx"] - 0.5) > face.MAX_TURN:
+            hint = "look_at_camera"
+        elif not known:
+            hint = "unknown"
+        else:
+            emp_id, name, score, why = face.best_match(face.embed(work, row), known)
+            hint = "matched" if emp_id else why
+        det = {"box": _scaled_box(row, scale), "name": name or "Unknown", "pose": pose, "hint": hint}
         if emp_id:
             det["employeeId"] = emp_id
             if hub.note_match(company, emp_id, me.get("repeatSeconds")):
@@ -179,6 +189,19 @@ def enroll(request: Request, employee_id: str = Form(...), photo: List[UploadFil
     if not vectors:
         return JSONResponse(status_code=400, content={"message": "No face was found in the photos. Try again, facing the camera in good light."})
 
+    # Is this face close to someone ELSE already registered? Saved anyway (two
+    # people can look alike), but the admin is told, because the kiosk may then
+    # hesitate between them, and a scan saved under the wrong name shows here.
+    similar = None
+    try:
+        others = [f for f in hub.faces_for(key, me) if str(f[0]) != str(employee_id)]
+        if others:
+            top = face.rank(vectors[0], others)[0]
+            if top[0] >= face.MATCH_THRESHOLD - 0.05:
+                similar = {"name": top[2], "score": round(top[0], 3)}
+    except Exception:
+        similar = None
+
     jpg = face.thumbnail_jpeg(thumb_src)
     thumb = "data:image/jpeg;base64," + base64.b64encode(jpg).decode() if jpg else None
     try:
@@ -189,7 +212,7 @@ def enroll(request: Request, employee_id: str = Form(...), photo: List[UploadFil
         return JSONResponse(status_code=503, content={"message": "Cannot reach the B.O.T server. The face was not saved."})
     hub.drop_faces(me["company"]["_id"])
     hub.forget_key(key)  # next frame re-reads the faces version
-    return {"ok": True, "scans": len(vectors), "employee": saved.get("employee")}
+    return {"ok": True, "scans": len(vectors), "employee": saved.get("employee"), "similarTo": similar}
 
 
 @app.get("/api/status")
