@@ -1209,14 +1209,31 @@
         #result-screen .name { font-size: clamp(1.4rem, 4vw, 2.4rem); font-weight: 800; }
         #result-screen .msg { font-size: clamp(1rem, 2.5vw, 1.4rem); font-weight: 600; opacity: 0.95; max-width: 640px; }
         @keyframes resultIn { from { opacity:0; transform: scale(0.96); } to { opacity:1; transform: scale(1); } }
-        #turn-cue { position:absolute; inset:0; z-index:15; display:none; align-items:center; justify-content:center; pointer-events:none; }
+        #turn-cue { position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:15; display:none; align-items:center; justify-content:center; pointer-events:none;
+            background: rgba(0,0,0,0.55); border-radius: 999px; padding: 10px; }
         #turn-cue.show { display:flex; }
-        #turn-cue .ring { position:relative; width:min(46vw, 260px); height:min(46vw, 260px); display:flex; align-items:center; justify-content:center; }
+        #turn-cue .ring { position:relative; width:min(32vw, 170px); height:min(32vw, 170px); display:flex; align-items:center; justify-content:center; }
         #turn-cue svg { position:absolute; inset:0; transform: rotate(-90deg); }
-        #turn-cue .arrow { font-size: min(24vw, 140px); line-height:1; color:#fff; text-shadow: 0 6px 30px rgba(0,0,0,0.6); }
-        #turn-cue .arrow.left { animation: nudgeLeft 0.9s ease-in-out infinite; }
-        #turn-cue .arrow.right { animation: nudgeRight 0.9s ease-in-out infinite; }
-        #turn-cue .arrow.ok { color:#34d399; animation:none; }
+        /* The check is shown, not written (owner, 13 Oct): a head that turns the
+           way to turn, then faces front with a pulse when it is time to look back. */
+        #turn-cue .head { position:relative; width:58%; height:58%; filter: drop-shadow(0 8px 24px rgba(0,0,0,0.55)); }
+        #turn-cue .head svg { position:static; transform:none; width:100%; height:100%; }
+        #turn-cue .arrow { position:absolute; top:50%; font-size: min(14vw, 84px); line-height:1; color:#fff; text-shadow: 0 6px 30px rgba(0,0,0,0.7); margin-top:-0.55em; }
+        #turn-cue .arrow.left { left:-6%; animation: nudgeLeft 0.9s ease-in-out infinite; }
+        #turn-cue .arrow.right { right:-6%; animation: nudgeRight 0.9s ease-in-out infinite; }
+        #turn-cue .arrow.ok { display:none; }
+        #turn-cue.left #cue-face { animation: faceLeft 1.6s ease-in-out infinite; }
+        #turn-cue.right #cue-face { animation: faceRight 1.6s ease-in-out infinite; }
+        #turn-cue.left #cue-skull { animation: skullTurn 1.6s ease-in-out infinite; }
+        #turn-cue.right #cue-skull { animation: skullTurn 1.6s ease-in-out infinite; }
+        #turn-cue.back .head { animation: lookPulse 0.9s ease-in-out infinite; }
+        #turn-cue.back #cue-skull { stroke:#34d399; }
+        #turn-cue.back .eye { animation: eyeGlow 0.9s ease-in-out infinite; }
+        @keyframes faceLeft { 0%,12% { transform: translateX(0); } 45%,85% { transform: translateX(-17px); } 100% { transform: translateX(0); } }
+        @keyframes faceRight { 0%,12% { transform: translateX(0); } 45%,85% { transform: translateX(17px); } 100% { transform: translateX(0); } }
+        @keyframes skullTurn { 0%,12% { transform: scaleX(1); } 45%,85% { transform: scaleX(0.9); } 100% { transform: scaleX(1); } }
+        @keyframes lookPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+        @keyframes eyeGlow { 0%,100% { fill:#1f2937; } 50% { fill:#10b981; } }
         @keyframes nudgeLeft { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-28px); } }
         @keyframes nudgeRight { 0%,100% { transform: translateX(0); } 50% { transform: translateX(28px); } }
         .admin-grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
@@ -1414,6 +1431,17 @@
                 <div id="turn-cue" aria-hidden="true">
                     <div class="ring">
                         <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" stroke="rgba(255,255,255,0.18)" stroke-width="6" fill="none"/><circle id="turn-ring" cx="50" cy="50" r="46" stroke="#34d399" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="0"/></svg>
+                        <div class="head">
+                            <svg viewBox="0 0 120 120">
+                                <ellipse id="cue-skull" cx="60" cy="60" rx="40" ry="50" fill="#f3c7a3" stroke="#fff" stroke-width="4" style="transform-origin:60px 60px"/>
+                                <g id="cue-face" style="transform-origin:60px 60px">
+                                    <circle class="eye" cx="45" cy="54" r="6" fill="#1f2937"/>
+                                    <circle class="eye" cx="75" cy="54" r="6" fill="#1f2937"/>
+                                    <path d="M60 60 L54 76 L62 76" fill="none" stroke="#b07a5a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M48 88 Q60 96 72 88" fill="none" stroke="#9d174d" stroke-width="4" stroke-linecap="round"/>
+                                </g>
+                            </svg>
+                        </div>
                         <div class="arrow" id="turn-arrow">←</div>
                     </div>
                 </div>
@@ -1433,7 +1461,7 @@
                     <div id="last-result" class="last-result"><span style="color:var(--text-sub); font-size:0.9rem;">Nobody yet today.</span></div>
                 </div>
                 <div class="panel">
-                    <h3>On duty now <span style="color:var(--text-sub); font-weight:600;">(this kiosk)</span></h3>
+                    <h3>On duty now</h3>
                     <div class="duty-list" id="active-grid"></div>
                 </div>
                 <div class="panel" style="flex:1; min-height:0;">
@@ -2218,7 +2246,8 @@
                         userMsg += `Error: ${err2.message}\nSolution: Check browser settings and use HTTPS.`;
                     }
 
-                    alert(userMsg);
+                    // Once per page: the frame loop tries the camera again every 10 s.
+                    if (!startLocalCam.alerted) { startLocalCam.alerted = true; alert(userMsg); }
                     return;
                 }
             }
@@ -2789,6 +2818,7 @@
         // Everyone's registered photo (or their initials): never sent to an outside site.
         let rosterById = new Map();
         async function loadRoster() {
+            if (!kioskKey()) return;
             try {
                 const list = await lensApi('/employees');
                 if (Array.isArray(list)) rosterById = new Map(list.map((p) => [String(p._id), p]));
@@ -2843,11 +2873,14 @@
                 const left = Math.max(0, 1 - (Date.now() - cueState.started) / (CUE_SECONDS * 1000));
                 ring.style.strokeDashoffset = String(289 * (1 - left));
                 ring.style.stroke = left > 0.35 ? '#34d399' : '#f59e0b';
-                cue.className = 'show';
+                cue.className = `show ${dir}`;
             } else if (hint === 'turn_back') {
-                arrow.textContent = '✓';
+                // Turned: now face the camera again. The head faces front and pulses.
+                arrow.textContent = '';
                 arrow.className = 'arrow ok';
-                cue.className = 'show';
+                ring.style.strokeDashoffset = '0';
+                ring.style.stroke = '#34d399';
+                cue.className = 'show back';
             } else {
                 cue.className = '';
                 if (hint !== 'turn_back') cueState = { dir: null, started: 0, spoke: null };
@@ -2943,9 +2976,8 @@
                 const who = d.name && d.name !== 'Unknown' ? `${d.name}, ` : '';
                 // The photo check (a real head turns, a photo does not). The picture
                 // is shown mirrored, so the person's left is the left of the screen.
-                if (d.hint === 'turn_left') text = `${who}turn your head slightly to your LEFT  ←`;
-                else if (d.hint === 'turn_right') text = `${who}turn your head slightly to your RIGHT  →`;
-                else if (d.hint === 'turn_back') text = `Good. Now look straight at the camera`;
+                // The check itself is shown by the moving head (#turn-cue), not in words.
+                if (d.hint === 'turn_left' || d.hint === 'turn_right' || d.hint === 'turn_back') text = d.name && d.name !== 'Unknown' ? d.name : '';
                 else if (d.hint === 'liveness_retry') text = 'Too slow. Look at the camera to try again';
                 else text = d.employeeId ? `Hello ${d.name}` : ({
                     come_closer: 'Please come a little closer',
@@ -2999,8 +3031,9 @@
             // local-v kept its last frozen picture and that was still being
             // sent for recognition.
             if (!v || !onLive || !localStream || v.srcObject !== localStream || v.videoWidth === 0) {
-                if (onLive && !localStream && !pushFrame.restarting) {
+                if (onLive && !localStream && !pushFrame.restarting && Date.now() - (pushFrame.lastRestart || 0) > 10000) {
                     pushFrame.restarting = true; // the live camera was lost: start it again
+                    pushFrame.lastRestart = Date.now();
                     startLocalCam('local-v').finally(() => { pushFrame.restarting = false; });
                 }
                 setTimeout(pushFrame, 500);
@@ -3036,7 +3069,7 @@
                         octx.strokeStyle = color;
                         octx.lineWidth = 4;
                         octx.strokeRect(x, y, w, h);
-                        const label = d.challenge ? `${d.name} · ${HINT_WORDS[d.hint] || ''}` : (known ? d.name : (HINT_WORDS[d.hint] || 'Not registered'));
+                        const label = d.challenge ? d.name : (known ? d.name : (HINT_WORDS[d.hint] || 'Not registered'));
                         octx.font = 'bold 22px Arial';
                         const tw = octx.measureText(label).width;
                         const ly = Math.max(28, y - 10);
@@ -3051,7 +3084,9 @@
                     if (ind) { ind.textContent = '📡 Recognition on · ' + new Date().toLocaleTimeString(); ind.style.color = '#00ff00'; }
                 } catch (e) {
                     if (ind) { ind.textContent = e.status === 503 ? '❌ No connection to B.O.T' : '❌ ' + (e.message || 'Server error'); ind.style.color = '#ff0000'; }
-                    if (e.handled) { isProcessing = false; return; }
+                    // Handled (signed out, plan blocked): keep the loop alive; it idles
+                    // until there is a key and no block again.
+                    if (e.handled) { isProcessing = false; setTimeout(pushFrame, 2000); return; }
                     await new Promise(r => setTimeout(r, 1500));
                 }
                 isProcessing = false;
@@ -3066,23 +3101,28 @@
         async function startLive() {
             const g = document.getElementById('active-grid');
             if (!g) return;
+            if (!kioskKey()) return;
             let rows;
             try { rows = await lensApi('/activity'); } catch { return; }
             const esc = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-            const latest = new Map(); // newest meaningful sighting per person
-            rows.forEach(r => { if (r.action && !latest.has(r.employeeId)) latest.set(r.employeeId, r); });
+            // Who is at work now, from the attendance record (phone, machine or
+            // camera). Older servers have no /on-duty: then read it from the taps.
+            let duty = null;
+            try { duty = await lensApi('/on-duty'); } catch { duty = null; }
+            if (!Array.isArray(duty)) {
+                const latest = new Map();
+                rows.forEach(r => { if (r.action && !latest.has(r.employeeId)) latest.set(r.employeeId, r); });
+                duty = [...latest.values()].filter((r) => IS_IN[r.action]);
+            }
             g.innerHTML = '';
-            let onDuty = 0;
-            latest.forEach((r) => {
-                if (!IS_IN[r.action]) return;
-                onDuty++;
+            duty.forEach((r) => {
                 const d = document.createElement('div');
                 d.className = 'duty-chip';
                 d.innerHTML = `${avatarHtml(r.employeeId, r.name)}<span>${esc(r.name)}</span>`;
                 g.appendChild(d);
             });
-            if (!onDuty) g.innerHTML = '<span style="color:var(--text-sub); font-size:0.9rem;">Nobody yet.</span>';
+            if (!duty.length) g.innerHTML = '<span style="color:var(--text-sub); font-size:0.9rem;">Nobody yet.</span>';
 
             const logList = document.getElementById('recent-log-list');
             if (logList) {
@@ -3123,6 +3163,7 @@
         // server answers from its own records on every call; this just keeps
         // the screen honest while nobody walks past.
         async function checkKiosk() {
+            if (!kioskKey()) return;
             try {
                 const me = await lensApi('/me');
                 hideSubscriptionBlock();
@@ -3138,6 +3179,16 @@
         }
 
         function initApp() {
+            if (initApp.started) {
+                // Signed in again without a reload: the timers and the frame
+                // loop are already running; just refresh what is shown.
+                showKioskLabel();
+                loadRoster().then(startLive);
+                checkKiosk();
+                if (!localStream) startLocalCam('local-v');
+                return;
+            }
+            initApp.started = true;
             tickClock();
             setInterval(tickClock, 1000);
             showKioskLabel();

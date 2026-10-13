@@ -29,7 +29,7 @@ from models import OutboxTap
 NODE_API_URL = os.getenv("NODE_API_URL", "http://localhost:5000").rstrip("/")
 TIMEOUT = float(os.getenv("NODE_TIMEOUT_SECONDS", "6"))
 ME_TTL = 60            # re-ask the backend who a key is, at most once a minute
-ME_STALE_OK = 600      # keep working on the last answer this long if the backend is down
+ME_STALE_OK = 8 * 3600  # keep working on the last answer this long while the backend is down (a key is re-checked as soon as it answers)
 SEEN_FRAMES = 2        # a face must match in this many frames ...
 SEEN_WINDOW = 3.0      # ... within this many seconds before it counts as a sighting
 # A sighting "on its way" this long is given up. It covers the head-turn check
@@ -38,6 +38,16 @@ SEEN_WINDOW = 3.0      # ... within this many seconds before it counts as a sigh
 # when that kiosk sends its next frame), and the person was ignored on EVERY
 # kiosk of the company until the kiosk server restarted (Bharat, 13 Oct).
 INFLIGHT_STALE = float(os.getenv("LENS_INFLIGHT_STALE_SECONDS", "30"))
+# After a sighting was answered, the same person is not asked again while they
+# stay in front of the camera: only once they have not been seen for this long
+# (they walked away and came back). Without it, someone sitting or chatting at
+# the tablet was asked to turn their head again every 2 minutes, and following
+# the prompt punched them out.
+LEAVE_GAP = float(os.getenv("LENS_LEAVE_GAP_SECONDS", "30"))
+# While the backend cannot be reached, frames do not each wait for the timeout:
+# the kiosk keeps working on its last answers and tries again after this long.
+DOWN_RETRY = 20.0
+_down_until = 0.0
 
 
 class BackendError(Exception):
@@ -61,8 +71,24 @@ def _call(method, path, key, json_body=None, extra_headers=None):
     except ValueError:
         body = {"message": r.text[:200]}
     if r.status_code >= 400:
+        if r.status_code >= 500 and isinstance(body, dict) and "<" in str(body.get("message", "")):
+            body = {"message": "The B.O.T server is not answering right now."}  # an nginx error page, not words for people
         raise BackendError(r.status_code, body)
     return body
+
+
+def is_outage(e):
+    # The backend (or nginx in front of it) failing, not deciding: 5xx, or too busy.
+    return isinstance(e, BackendError) and (e.status >= 500 or e.status == 429)
+
+
+def _mark_down():
+    global _down_until
+    _down_until = time.time() + DOWN_RETRY
+
+
+def backend_down():
+    return time.time() < _down_until
 
 
 # ── who is this kiosk ─────────────────────────────────────────────────────────
@@ -74,7 +100,8 @@ def whoami(key):
     """
     The backend's answer for this key: company, kiosk, faces version, how long
     a repeat sighting is ignored. A rejected key raises BackendError (401/403).
-    If the backend cannot be reached, the last answer is used for up to 10 min.
+    If the backend cannot be reached or is failing (5xx), the last answer is
+    used for up to ME_STALE_OK.
     """
     if not key:
         raise BackendError(401, {"code": "kiosk_key_missing", "message": "This kiosk is not set up."})
@@ -84,13 +111,21 @@ def whoami(key):
         hit = _me_cache.get(h)
     if hit and now - hit[0] < ME_TTL:
         return hit[1]
+    if hit and backend_down() and now - hit[0] < ME_STALE_OK:
+        return hit[1]
     try:
         body = _call("GET", "/lens/me", key)
-    except BackendError:
+    except BackendError as e:
+        if is_outage(e):
+            _mark_down()
+            if hit and now - hit[0] < ME_STALE_OK:
+                return hit[1]
+            raise BackendError(503, {"message": "The B.O.T server is not answering right now."})
         with _me_lock:
             _me_cache.pop(h, None)
         raise
     except requests.RequestException:
+        _mark_down()
         if hit and now - hit[0] < ME_STALE_OK:
             return hit[1]
         raise BackendError(503, {"message": "Cannot reach the B.O.T server. Check the internet connection."})
@@ -117,9 +152,15 @@ def faces_for(key, me):
         cached = _faces.get(company)
     if cached and cached["version"] == version:
         return cached["items"]
+    # A version that differs right after a reload is the "who am I" answer
+    # (cached up to a minute) lagging behind: do not download every frame.
+    if cached and (backend_down() or time.time() - cached.get("fetched", 0) < 15):
+        return cached["items"]
     try:
         body = _call("GET", "/lens/faces", key)
-    except requests.RequestException:
+    except (requests.RequestException, BackendError) as e:
+        if not isinstance(e, BackendError) or is_outage(e):
+            _mark_down()
         return cached["items"] if cached else []
     items = []
     for f in body.get("faces", []):
@@ -127,7 +168,7 @@ def faces_for(key, me):
         if vectors:
             items.append((str(f["employeeId"]), f.get("name") or "", vectors))
     with _faces_lock:
-        _faces[company] = {"version": body.get("version"), "items": items}
+        _faces[company] = {"version": body.get("version"), "items": items, "fetched": time.time()}
     print(f"--- faces loaded for company {company[-6:]}: {len(items)} ---")
     return items
 
@@ -154,7 +195,13 @@ def note_match(company, emp_id, repeat_seconds):
     k = (str(company), str(emp_id))
     now = time.time()
     with _seen_lock:
-        s = _seen.setdefault(k, {"hits": [], "inflight": False, "inflight_at": 0.0, "next_ok": 0.0, "last": None})
+        s = _seen.setdefault(k, {"hits": [], "inflight": False, "inflight_at": 0.0, "next_ok": 0.0, "last": None,
+                                 "last_seen": 0.0, "must_leave": False})
+        prev_seen, s["last_seen"] = s.get("last_seen", 0.0), now
+        if s.get("must_leave"):
+            if now - prev_seen < LEAVE_GAP:
+                return False   # still in front of the camera since their last answer
+            s["must_leave"] = False
         s["hits"] = [t for t in s["hits"] if now - t <= SEEN_WINDOW] + [now]
         if s["inflight"] and now - s.get("inflight_at", 0.0) > INFLIGHT_STALE:
             s["inflight"] = False   # abandoned (the kiosk that started it went away)
@@ -191,6 +238,10 @@ def _finish(company, emp_id, result, retry_after=None):
         s["inflight"] = False
         if result is not None:
             s["last"] = result
+            # Answered (recorded, or "already done"): not again until they have left.
+            if not result.get("offline") and result.get("reason") != "refused":
+                s["must_leave"] = True
+                s["last_seen"] = time.time()
         if retry_after:
             s["next_ok"] = time.time() + retry_after
 
@@ -208,11 +259,20 @@ def send_sighting(key, company, emp_id, score):
         _finish(company, emp_id, body, body.get("retryAfterSec"))
         return body
     except BackendError as e:
-        _finish(company, emp_id, None)
+        if is_outage(e):
+            # The server failed, it did not decide: keep the sighting and send it later.
+            _mark_down()
+            _queue(key, payload)
+            _finish(company, emp_id, {"offline": True})
+            return {"recorded": False, "reason": "offline", "offline": True,
+                    "message": "Saved. It will be sent when the server answers again."}
+        # Refused (e.g. switched-off employee): they may try again soon, not after the whole window.
+        _finish(company, emp_id, {"reason": "refused"}, 15)
         return {"recorded": False, "reason": "refused", "message": e.body.get("message") or "Not recorded.", "status": e.status}
     except requests.RequestException:
+        _mark_down()
         _queue(key, payload)
-        _finish(company, emp_id, None)
+        _finish(company, emp_id, {"offline": True})
         return {"recorded": False, "reason": "offline", "offline": True,
                 "message": "Saved. It will be sent when the connection is back."}
 

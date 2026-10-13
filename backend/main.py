@@ -125,7 +125,10 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
         return JSONResponse(status_code=400, content={"message": "The camera frame could not be read."})
 
     company = str(me["company"]["_id"])
-    kiosk = str((me.get("kiosk") or {}).get("_id") or company)
+    # The head-turn check belongs to this tablet (its key), not to the kiosk
+    # record: two tablets signed in as the same kiosk name share an id, and they
+    # used to share one check, so one person's check blocked the other tablet.
+    kiosk = "tab-" + hub._hash(key)[:24]
     known = hub.faces_for(key, me)
     work, rows, scale = face.detect(img)
     detections, events = [], []
@@ -135,8 +138,12 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
     challenge, expired = liveness.current(kiosk)
     if expired:
         hub.release(company, expired["emp_id"])
+    if challenge:
+        # Follow the person being checked, not whoever is biggest now.
+        primary = liveness.tracked_row(challenge, rows)
     for row in rows:
         emp_id, name, score, why = (None, None, 0.0, "unknown")
+        vec = None
         pose = face.pose_of(row)
         # Only a near, straight-on face is matched: a small or turned face is
         # where wrong matches come from. The kiosk tells the person what to do.
@@ -147,9 +154,18 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
         elif not known:
             hint = "unknown"
         else:
-            emp_id, name, score, why = face.best_match(face.embed(work, row), known)
+            vec = face.embed(work, row)
+            emp_id, name, score, why = face.best_match(vec, known)
             hint = "matched" if emp_id else why
         det = {"box": _scaled_box(row, scale), "name": name or "Unknown", "pose": pose, "hint": hint}
+
+        # Someone else, clearly recognised, now stands where the checked person
+        # stood: they left. Drop their check so this person can be served.
+        if challenge and row is primary and emp_id and emp_id != challenge["emp_id"] \
+                and not (vec is not None and face.is_same_person(vec, known, challenge["emp_id"])):
+            liveness.clear(kiosk)
+            hub.release(company, challenge["emp_id"])
+            challenge = None
 
         # A photo check in progress for the person in front.
         if challenge and row is primary:
@@ -164,6 +180,8 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
                 detections.append(det)
                 continue
             # stage "back": straight on again, and still the same person
+            if emp_id != challenge["emp_id"] and vec is not None and face.is_same_person(vec, known, challenge["emp_id"]):
+                emp_id, name = challenge["emp_id"], challenge["name"]
             if emp_id == challenge["emp_id"]:
                 liveness.clear(kiosk)
                 result = hub.send_sighting(key, company, emp_id, challenge["score"])

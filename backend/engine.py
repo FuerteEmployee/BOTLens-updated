@@ -187,6 +187,24 @@ def best_match(vector, faces):
     return best_id, best_name, best_score, "matched"
 
 
+# After the head turn, the person only has to be shown to be the SAME person
+# again. That is a narrower question than "who is this?", so it does not need
+# the margin over the next-best person, and a slightly lower score will do. It
+# used to need a full match, and a face that scored just under the bar or close
+# to a look-alike left the person waiting at "look straight" until some frame
+# happened to match -- which looked like the kiosk waited for a blink (13 Oct).
+CONFIRM_SLACK = float(os.getenv("LENS_CONFIRM_SLACK", "0.05"))
+
+
+def is_same_person(vector, faces, emp_id):
+    # True when emp_id is the closest registered person and close enough.
+    ranked = rank(vector, faces)
+    if not ranked:
+        return False
+    best_score, best_id, _ = ranked[0]
+    return str(best_id) == str(emp_id) and best_score >= MATCH_THRESHOLD - CONFIRM_SLACK
+
+
 def face_width(face_row, scale=1.0):
     """Face width in pixels of the frame the kiosk sent."""
     try:

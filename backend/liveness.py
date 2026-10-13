@@ -61,7 +61,8 @@ def measures(row):
         d2 = max(1.0, dx * dx + dy * dy)
         t = ((nx - x1) * dx + (ny - y1) * dy) / d2
         h = max(1.0, float(row[3]))
-        return {"rx": t, "eye": math.sqrt(d2) / h, "h": h, "roll": math.degrees(math.atan2(dy, dx))}
+        return {"rx": t, "eye": math.sqrt(d2) / h, "h": h, "roll": math.degrees(math.atan2(dy, dx)),
+                "cx": float(row[0]) + float(row[2]) / 2, "cy": float(row[1]) + h / 2, "w": max(1.0, float(row[2]))}
     except Exception:
         return None
 
@@ -82,8 +83,33 @@ def turned_enough(ch, row):
         return False
     if abs(m["roll"]) > MAX_ROLL:  # head (or card) tilted sideways, not turned
         return False
-    # the same face at about the same distance, not someone else stepping in
-    return 0.7 <= m["h"] / ch["base"]["h"] <= 1.4
+    # the same face at about the same distance and place, not someone else stepping in
+    return 0.7 <= m["h"] / ch["base"]["h"] <= 1.4 and same_place(ch, m)
+
+
+def same_place(ch, m):
+    b = ch["base"]
+    if "cx" not in b or "cx" not in m:
+        return True
+    return abs(m["cx"] - b["cx"]) <= 0.6 * b["w"] and abs(m["cy"] - b["cy"]) <= 0.6 * b["w"]
+
+
+def tracked_row(ch, rows):
+    """
+    The face this check is about: the one nearest where the person stood when
+    it started (not simply the biggest face, which may be someone who has just
+    stepped up). None when nobody is there any more.
+    """
+    best, best_d = None, None
+    b = ch["base"]
+    for r in rows:
+        m = measures(r)
+        if not m or not same_place(ch, m):
+            continue
+        d = (m["cx"] - b.get("cx", m["cx"])) ** 2 + (m["cy"] - b.get("cy", m["cy"])) ** 2
+        if best_d is None or d < best_d:
+            best, best_d = r, d
+    return best
 
 
 def start(kiosk, emp_id, name, score, row, now=None):
@@ -104,9 +130,18 @@ def current(kiosk, now=None):
     now = now or time.time()
     with _lock:
         ch = _challenges.get(str(kiosk))
+        if ch and now - ch["started"] > TIMEOUT + 30:
+            # Left behind by a tablet that went away (tab closed) long ago: drop
+            # it quietly. Reporting it as just expired would reset the person's
+            # waiting time and ask them again for a punch already done elsewhere.
+            _challenges.pop(str(kiosk), None)
+            return None, None
         if ch and now - ch["started"] > TIMEOUT:
             _challenges.pop(str(kiosk), None)
             return None, ch
+        # tidy checks of other tablets that went away
+        for k in [k for k, c in _challenges.items() if now - c["started"] > TIMEOUT + 30]:
+            _challenges.pop(k, None)
         return ch, None
 
 
