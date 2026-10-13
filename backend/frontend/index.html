@@ -1166,6 +1166,93 @@
             color: #9ca3af;
             font-weight: 700;
         }
+
+        /* ===== Kiosk layout (12 Oct): camera + side panel, clock, result screen ===== */
+        nav { padding: 0.6rem 1.2rem; gap: 12px; }
+        .kiosk-id { display:flex; flex-direction:column; line-height:1.15; min-width:0; }
+        .kiosk-id small { color: var(--text-sub); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32vw; }
+        .kiosk-clock { text-align:center; line-height:1.05; }
+        .kiosk-clock .t { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+        .kiosk-clock .d { font-size: 0.85rem; color: var(--text-sub); }
+        .top-actions { display:flex; gap:8px; align-items:center; }
+        .icon-btn { height:46px; min-width:46px; padding:0 12px; border-radius:14px; border:1px solid var(--glass-border); background: rgba(255,255,255,0.06); color: var(--text-main); font-size:1.25rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; }
+        .icon-btn:hover { background: rgba(255,255,255,0.12); }
+        .icon-btn.off { color: var(--text-sub); }
+        .icon-btn .lbl { font-size: 0.8rem; font-weight: 700; }
+        .container { padding: 1rem 1.2rem; max-width: 1600px; }
+        .live-layout { display:grid; grid-template-columns: minmax(0,1fr); gap:16px; }
+        @media (min-width: 1000px) { .live-layout { grid-template-columns: minmax(0,1fr) 360px; } }
+        #vid-cont { height: 62vh; width: 100%; margin: 0; border-radius: 22px; border: 1px solid var(--glass-border); }
+        @media (min-width: 1000px) { #vid-cont { height: calc(100vh - 120px); min-height: 420px; } }
+        .side-panel { display:flex; flex-direction:column; gap:14px; min-width:0; }
+        .panel { background: var(--glass-bg); border:1px solid var(--glass-border); border-radius:18px; padding:14px 16px; }
+        .panel h3 { font-size: 0.95rem; margin-bottom: 10px; display:flex; align-items:center; gap:8px; }
+        .avatar { width:44px; height:44px; border-radius:50%; object-fit:cover; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-weight:800; color:#fff; font-size:1rem; background: linear-gradient(135deg, #9d174d, #db2777); border:2px solid rgba(255,255,255,0.15); }
+        .avatar.lg { width:120px; height:120px; font-size:2.6rem; border-width:4px; }
+        .duty-list { display:flex; flex-wrap:wrap; gap:8px; }
+        .duty-chip { display:flex; align-items:center; gap:8px; background: rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.35); border-radius:999px; padding:4px 12px 4px 4px; font-weight:700; font-size:0.85rem; }
+        .duty-chip .avatar { width:30px; height:30px; font-size:0.75rem; border-width:1px; }
+        .recent-row { display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid rgba(255,255,255,0.05); font-size:0.85rem; }
+        .recent-row .avatar { width:32px; height:32px; font-size:0.75rem; }
+        .recent-row .who { flex:1; min-width:0; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .last-result { display:flex; align-items:center; gap:12px; }
+        .last-result .what { font-weight:800; font-size:1.05rem; }
+        .last-result .when { color: var(--text-sub); font-size:0.85rem; }
+        #result-screen { position:absolute; inset:0; z-index:20; display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:20px; color:#fff; backdrop-filter: blur(6px); }
+        #result-screen.show { display:flex; animation: resultIn 0.25s ease-out; }
+        #result-screen.in { background: rgba(5,150,105,0.88); }
+        #result-screen.out { background: rgba(37,99,235,0.88); }
+        #result-screen.lunch { background: rgba(217,119,6,0.9); }
+        #result-screen.soon { background: rgba(71,85,105,0.92); }
+        #result-screen.bad { background: rgba(220,38,38,0.9); }
+        #result-screen .big { font-size: clamp(2rem, 6vw, 4rem); font-weight: 900; letter-spacing: 1px; line-height:1; }
+        #result-screen .name { font-size: clamp(1.4rem, 4vw, 2.4rem); font-weight: 800; }
+        #result-screen .msg { font-size: clamp(1rem, 2.5vw, 1.4rem); font-weight: 600; opacity: 0.95; max-width: 640px; }
+        @keyframes resultIn { from { opacity:0; transform: scale(0.96); } to { opacity:1; transform: scale(1); } }
+        #turn-cue { position:absolute; inset:0; z-index:15; display:none; align-items:center; justify-content:center; pointer-events:none; }
+        #turn-cue.show { display:flex; }
+        #turn-cue .ring { position:relative; width:min(46vw, 260px); height:min(46vw, 260px); display:flex; align-items:center; justify-content:center; }
+        #turn-cue svg { position:absolute; inset:0; transform: rotate(-90deg); }
+        #turn-cue .arrow { font-size: min(24vw, 140px); line-height:1; color:#fff; text-shadow: 0 6px 30px rgba(0,0,0,0.6); }
+        #turn-cue .arrow.left { animation: nudgeLeft 0.9s ease-in-out infinite; }
+        #turn-cue .arrow.right { animation: nudgeRight 0.9s ease-in-out infinite; }
+        #turn-cue .arrow.ok { color:#34d399; animation:none; }
+        @keyframes nudgeLeft { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-28px); } }
+        @keyframes nudgeRight { 0%,100% { transform: translateX(0); } 50% { transform: translateX(28px); } }
+        .admin-grid { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+        .admin-grid .btn-sub { padding:16px 12px; font-size:0.95rem; font-weight:700; text-align:center; }
+        .kiosk-clock .t, .kiosk-clock .d { white-space: nowrap; }
+        @media (max-width: 640px) {
+            nav { padding: 0.5rem 0.75rem; }
+            .kiosk-clock .t { font-size: 1.2rem; }
+            .kiosk-clock .d { font-size: 0.72rem; }
+            .kiosk-id { display:none; }
+            .icon-btn { height:42px; min-width:42px; padding:0 10px; }
+            .icon-btn .lbl { display:none; }
+            #vid-cont { height: 58vh; }
+        }
+        /* Registration: steps, search list, quality */
+        .reg-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 14px; flex-wrap: wrap; }
+        .steps { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+        .step { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; border:1px solid var(--glass-border); color: var(--text-sub); font-size:0.85rem; font-weight:700; }
+        .step b { width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.08); font-size:0.75rem; }
+        .step.active { color:#fff; border-color: var(--accent); background: rgba(219,39,119,0.15); }
+        .step.active b { background: var(--accent); }
+        .step.done { color:#34d399; border-color: rgba(52,211,153,0.5); }
+        .step.done b { background:#059669; color:#fff; }
+        .people-tools { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+        .people-tools .inp { flex:1; min-width: 180px; }
+        .chip-btn { height:44px; padding:0 14px; border-radius:12px; border:1px solid var(--glass-border); background: rgba(255,255,255,0.05); color: var(--text-sub); font-weight:700; cursor:pointer; }
+        .chip-btn.active { background: var(--primary); color:#fff; border-color: var(--primary); }
+        .people-list { max-height: 300px; overflow-y:auto; border:1px solid var(--glass-border); border-radius:14px; }
+        .person-row { display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer; min-height:56px; }
+        .person-row:hover, .person-row.sel { background: rgba(219,39,119,0.12); }
+        .person-row .who { flex:1; min-width:0; font-weight:700; }
+        .badge { font-size:0.72rem; font-weight:800; padding:4px 8px; border-radius:999px; white-space:nowrap; }
+        .badge.good { background: rgba(16,185,129,0.15); color:#34d399; }
+        .badge.warn { background: rgba(245,158,11,0.15); color:#fbbf24; }
+        .badge.none { background: rgba(148,163,184,0.15); color:#cbd5e1; }
+        .people-count { color: var(--text-sub); font-size: 0.85rem; margin: 8px 2px 14px; }
     </style>
 </head>
 
@@ -1288,30 +1375,23 @@
         </div>
         <div class="sidebar-nav">
             <button class="tab-btn active" id="mob-tab-live" onclick="showTab('live', startLive)">📡 Live View</button>
-            <button class="tab-btn" id="mob-tab-add" onclick="confirmAndShowEditEmployees()">👤 Register Faces</button>
-            <button class="tab-btn" onclick="logout()" style="margin-top:auto; color:var(--danger);">🚪 Logout</button>
         </div>
     </div>
 
     <nav>
-        <div class="logo-area" onclick="showTab('live', startLive)"
-            style="cursor:pointer; display:flex; align-items:center; gap:10px;">
-            <img src="/static/icon.png"
-                style="height:35px; width:35px; object-fit:contain; border-radius:6px; background:rgba(255,255,255,0.1); padding:2px;">
-            <span style="font-weight:800; font-size:1.4rem; letter-spacing:-1px;">BOT<span
-                    style="color:var(--accent);">Lens</span></span>
+        <div class="logo-area" style="display:flex; align-items:center; gap:10px; min-width:0;">
+            <img src="/static/icon.png" alt=""
+                style="height:38px; width:38px; object-fit:contain; border-radius:8px; background:rgba(255,255,255,0.1); padding:2px;">
+            <div class="kiosk-id">
+                <span style="font-weight:800; font-size:1.3rem; letter-spacing:-0.5px;">BOT<span style="color:var(--accent);">Lens</span></span>
+                <small id="kiosk-label"></small>
+            </div>
         </div>
-        <div style="display:flex; align-items:center; gap:24px;">
-            <div class="tabs">
-                <button class="tab-btn active" id="tab-live" onclick="showTab('live', startLive)">Live View</button>
-                <button class="tab-btn" id="tab-add" onclick="confirmAndShowEditEmployees()">Register Faces</button>
-            </div>
-            <div style="display:flex; align-items:center; gap:10px;">
-                <button class="btn-sub" onclick="logout()"
-                    style="background:transparent; border:1px solid var(--danger); color:var(--danger); font-weight:700;">🚪
-                    Logout</button>
-                <button class="menu-trigger" onclick="toggleSidebar()">☰</button>
-            </div>
+        <div class="kiosk-clock" aria-live="off"><div class="t" id="kiosk-clock">--:--</div><div class="d" id="kiosk-date"></div></div>
+        <div class="top-actions">
+            <button type="button" class="icon-btn" id="sound-btn" onclick="toggleSound()" aria-label="Sound on" title="Sound on / off">🔊<span class="lbl">Sound</span></button>
+            <button type="button" class="icon-btn" id="fs-btn" onclick="toggleFS()" aria-label="Full screen" title="Full screen">⛶</button>
+            <button type="button" class="icon-btn" onclick="openAdminMenu()" aria-label="Admin settings" title="Admin settings">⚙<span class="lbl">Admin</span></button>
         </div>
     </nav>
 
@@ -1322,33 +1402,47 @@
         <h1 id="alert-title" style="font-size:2.5rem; margin-bottom:10px; color:#fff;">SUCCESS</h1>
         <p id="alert-msg" style="font-size:1.5rem; color:var(--accent); font-weight:700;"></p>
     </div>
-    <audio id="punch-sound" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"
-        preload="auto"></audio>
 
     <div class="container">
         <div id="view-live" class="tab-content active">
-
+            <div class="live-layout">
             <div class="video-container" id="vid-cont" style="position:relative;">
-                <div style="position:absolute; top:15px; right:15px; z-index:10; display:flex; gap:10px;">
-                    <button class="btn-sub" onclick="showTab('live')"
-                        style="background:var(--accent); border-radius:12px; font-weight:700; padding:10px 15px;">🔄
-                        Reset</button>
-                    <button class="btn-sub" onclick="toggleFS()"
-                        style="background:rgba(0,0,0,0.6); border-radius:12px; font-weight:700; padding:10px 15px;">⛶
-                        Fullscreen</button>
-                </div>
-                <video id="local-v" style="width:100%; height:100%; display:block; border-radius:10px; background:#000; object-fit: cover;"
+                <video id="local-v" style="width:100%; height:100%; display:block; background:#000; object-fit: cover;"
                     autoplay playsinline muted></video>
                 <canvas id="overlay-c"
                     style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; object-fit: cover;"></canvas>
+                <div id="turn-cue" aria-hidden="true">
+                    <div class="ring">
+                        <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" stroke="rgba(255,255,255,0.18)" stroke-width="6" fill="none"/><circle id="turn-ring" cx="50" cy="50" r="46" stroke="#34d399" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="0"/></svg>
+                        <div class="arrow" id="turn-arrow">←</div>
+                    </div>
+                </div>
+                <div id="result-screen" role="status" aria-live="assertive" onclick="hideResult()"></div>
                 <div id="frame-indicator"
                     style="position:absolute; bottom:15px; right:15px; background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:50px; font-size:11px; color:var(--accent); z-index:10;">
                     📡 Initializing...</div>
                 <div id="live-guide" aria-live="polite"
-                    style="position:absolute; left:50%; bottom:55px; transform:translateX(-50%); max-width:92%; background:rgba(0,0,0,0.65); color:#fff; padding:10px 18px; border-radius:14px; font-size:1.15rem; font-weight:700; text-align:center; z-index:10;">
+                    style="position:absolute; left:50%; bottom:55px; transform:translateX(-50%); max-width:92%; background:rgba(0,0,0,0.65); color:#fff; padding:12px 20px; border-radius:16px; font-size:clamp(1.05rem, 2.6vw, 1.6rem); font-weight:800; text-align:center; z-index:16;">
                     Stand in front of the camera</div>
                 <img id="live-img" style="display:none;">
                 <canvas id="local-c" style="display:none;"></canvas>
+            </div>
+            <div class="side-panel">
+                <div class="panel">
+                    <h3>Last punch</h3>
+                    <div id="last-result" class="last-result"><span style="color:var(--text-sub); font-size:0.9rem;">Nobody yet today.</span></div>
+                </div>
+                <div class="panel">
+                    <h3>On duty now <span style="color:var(--text-sub); font-weight:600;">(this kiosk)</span></h3>
+                    <div class="duty-list" id="active-grid"></div>
+                </div>
+                <div class="panel" style="flex:1; min-height:0;">
+                    <h3>Recent <span style="height:8px; width:8px; border-radius:50%; background:#00ff00; animation: pulse 2s infinite; display:inline-block;"></span></h3>
+                    <div id="recent-log-list" style="max-height:340px; overflow-y:auto;">
+                        <div style="text-align:center; padding:16px; opacity:0.5;">Waiting for activity...</div>
+                    </div>
+                </div>
+            </div>
             </div>
             <div id="camera-troubleshoot"
                 style="display:none; margin-top: 20px; padding: 20px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); border-radius: 15px; position: relative;">
@@ -1368,37 +1462,35 @@
                     </li>
                 </ul>
             </div>
-            <div style="margin-top: 30px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                    <h3>On duty now (seen by this kiosk)</h3>
-                    <button class="btn-sub"
-                        onclick="document.getElementById('camera-troubleshoot').style.display='block'"
-                        style="font-size:0.7rem; opacity:0.7;">Camera Issues?</button>
-                </div>
-                <div class="grid-panel" id="active-grid"></div>
-            </div>
-
-            <div style="margin-top: 30px;">
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px;">
-                    <h3>Recent Activity</h3>
-                    <div style="height:8px; width:8px; border-radius:50%; background:#00ff00; animation: pulse 2s infinite;"></div>
-                </div>
-                <div class="table-wrap" id="recent-log-list" style="max-height:300px; overflow-y:auto; padding:10px;">
-                    <div style="text-align:center; padding:20px; opacity:0.5;">Waiting for activity...</div>
-                </div>
-            </div>
         </div>
 
         <!-- Add Employee -->
         <div id="view-add" class="tab-content">
             <div class="glass-form">
-                <h2 class="mb-4">Register Faces</h2>
+                <div class="reg-head">
+                    <h2 style="margin:0;">Register Faces</h2>
+                    <button type="button" class="btn-sub" onclick="showTab('live', startLive)" style="font-weight:700;">← Back to kiosk</button>
+                </div>
+                <div class="steps" aria-label="Steps">
+                    <div class="step" id="step-1"><b>1</b>Choose person</div>
+                    <div class="step" id="step-2"><b>2</b>Scan face</div>
+                    <div class="step" id="step-3"><b>3</b>Saved</div>
+                </div>
                 <div id="reg-saved-banner" role="status" style="display:none; margin-bottom:16px; padding:12px 14px; border-radius:12px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.45); color:#34d399; font-weight:700;"></div>
                 <form id="add-form">
                     <div class="form-row">
                         <div class="form-group">
                             <label>Employee</label>
-                            <select id="emp-select" class="inp" onchange="onEmpSelectChange()">
+                            <div class="people-tools">
+                                <input id="people-search" class="inp" type="search" placeholder="Search name..." autocomplete="off" oninput="renderPeopleList()">
+                                <button type="button" class="chip-btn active" data-filter="all" onclick="setPeopleFilter('all')">All</button>
+                                <button type="button" class="chip-btn" data-filter="none" onclick="setPeopleFilter('none')">Not registered</button>
+                                <button type="button" class="chip-btn" data-filter="weak" onclick="setPeopleFilter('weak')">Needs rescan</button>
+                            </div>
+                            <div class="people-list" id="people-list"></div>
+                            <div class="people-count" id="people-count"></div>
+                            <!-- kept for the save logic; the list above drives it -->
+                            <select id="emp-select" class="inp" onchange="onEmpSelectChange()" style="display:none;" aria-hidden="true" tabindex="-1">
                                 <option value="" disabled selected>Select an employee</option>
                             </select>
                         </div>
@@ -1412,7 +1504,8 @@
                             <img id="current-photo-img" alt="Employee photo"
                                 onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 150 150%22><rect width=%22150%22 height=%22150%22 fill=%22%23374151%22/><text x=%2275%22 y=%2285%22 font-size=%2260%22 text-anchor=%22middle%22 fill=%22%239ca3af%22 font-family=%22sans-serif%22>?</text></svg>';"
                                 style="width:150px; height:150px; object-fit:cover; border-radius:50%; border:2px solid var(--glass-border); display:block; margin: 0 auto 15px auto; background:#374151;">
-                            <p id="current-photo-note" style="color:var(--text-sub); font-size:0.8rem; margin-bottom:12px;"></p>
+                            <p id="current-photo-note" style="color:var(--text-sub); font-size:0.8rem; margin-bottom:8px;"></p>
+                            <p style="margin-bottom:12px;"><span id="current-photo-quality" class="badge"></span></p>
                             <button type="button" class="btn-sub" onclick="startPhotoChange()">🔁 Scan again</button>
                             <button type="button" class="btn-sub" onclick="removeFace()" style="color:var(--danger); border-color:var(--danger);">🗑 Remove face</button>
                         </div>
@@ -1502,12 +1595,38 @@
     </div>
 
     <!-- Edit Modal -->
+    <div id="admin-menu" class="modal" onclick="if (event.target === this) closeAdminMenu()">
+        <div class="modal-content" style="max-width:480px;">
+            <h2 class="mb-4">Kiosk settings</h2>
+            <div class="admin-grid">
+                <button type="button" class="btn-sub" onclick="closeAdminMenu(); confirmAndShowEditEmployees();">👤 Register faces</button>
+                <button type="button" class="btn-sub" onclick="closeAdminMenu(); showTab('live', startLive);">🔄 Restart camera</button>
+                <button type="button" class="btn-sub" onclick="closeAdminMenu(); showTab('live', startLive); document.getElementById('camera-troubleshoot').style.display='block';">🛠 Camera help</button>
+                <button type="button" class="btn-sub" onclick="toggleSound(); renderAdminMenu();" id="admin-sound-btn">🔊 Sound on</button>
+            </div>
+            <div class="form-group" style="margin-top:16px;">
+                <label for="voice-select">Spoken confirmation</label>
+                <select id="voice-select" class="inp" onchange="setVoice(this.value)">
+                    <option value="en">English</option>
+                    <option value="hi">हिंदी (Hindi)</option>
+                    <option value="gu">ગુજરાતી (Gujarati)</option>
+                    <option value="off">Off (beep only)</option>
+                </select>
+                <p style="color:var(--text-sub); font-size:0.8rem; margin-top:6px;">Uses the tablet's own voices. If a language has no voice installed, the tablet may read it in English or stay silent.</p>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:18px;">
+                <button type="button" class="btn-sub" style="flex:1;" onclick="closeAdminMenu()">Close</button>
+                <button type="button" class="btn-sub" style="flex:1; color:var(--danger); border-color:var(--danger);" onclick="logout()">🚪 Sign out kiosk</button>
+            </div>
+        </div>
+    </div>
+
     <div id="add-employee-auth-modal" class="modal">
         <div class="modal-content" style="max-width:420px;">
             <h2 class="mb-4">Confirm Admin Identity</h2>
-            <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:20px; line-height:1.5;">Registering
-                faces needs the BOTLens email and password, so nobody at an unattended kiosk can register their own
-                face as someone else. You will be asked again after 15 minutes.</p>
+            <p style="color:var(--text-sub); font-size:0.85rem; margin-bottom:20px; line-height:1.5;">Kiosk
+                settings and registering faces need the BOTLens email and password, so nobody at an unattended kiosk
+                can sign it out or register their own face as someone else. You will be asked again after 15 minutes.</p>
             <form id="add-auth-form" onsubmit="submitAddEmployeeAuth(event)">
                 <div class="form-group" style="margin-bottom:15px;">
                     <label>Email</label>
@@ -1925,13 +2044,16 @@
             select.innerHTML = '<option value="" disabled' + (previousValue ? '' : ' selected') + '>Select an employee</option>' +
                 roster.map(e => `<option value="${esc(e._id)}">${esc(e.name)}${e.hasFace ? ' ✓' : ''}</option>`).join('');
             select.value = roster.some(e => e._id === previousValue) ? previousValue : '';
+            rosterById = new Map(roster.map((p) => [String(p._id), p]));
             onEmpSelectChange();
+            renderPeopleList();
         }
 
         function onEmpSelectChange() {
             const id = document.getElementById('emp-select').value;
             if (id) showSavedBanner('');
             resetEmployeeForm();
+            updateSteps();
             stopRegCam();
 
             const detailsBlock = document.getElementById('emp-details-fields');
@@ -1951,6 +2073,13 @@
                 document.getElementById('current-photo-note').textContent = person.faceUpdatedAt
                     ? `Face registered ${new Date(person.faceUpdatedAt).toLocaleDateString('en-IN')}`
                     : 'Face registered';
+                const q = document.getElementById('current-photo-quality');
+                if (q) {
+                    q.className = 'badge ' + (person.needsRescan ? 'warn' : 'good');
+                    q.textContent = person.needsRescan
+                        ? `Rescan recommended: only ${person.angles || 1} angle${(person.angles || 1) === 1 ? '' : 's'}. Tap "Scan again".`
+                        : `✓ Good face data${person.angles ? ` (${person.angles} angles)` : ''}`;
+                }
                 document.getElementById('current-photo-block').style.display = 'block';
                 document.getElementById('photo-capture-block').style.display = 'none';
                 photoCaptureActive = false;
@@ -2529,10 +2658,12 @@
         }
 
         function cancelAddEmployeeAuth() {
+            const wasMenu = menuAfterGrant;
+            menuAfterGrant = false;
             saveAfterGrant = false;
             removeAfterGrant = null;
             document.getElementById('add-employee-auth-modal').style.display = 'none';
-            showTab('live', startLive);
+            if (!wasMenu) showTab('live', startLive);
         }
 
         async function submitAddEmployeeAuth(e) {
@@ -2548,7 +2679,8 @@
                 enrollGrant = data.grant;
                 enrollGrantUntil = Date.now() + (data.expiresInSec || 900) * 1000;
                 document.getElementById('add-employee-auth-modal').style.display = 'none';
-                if (saveAfterGrant) { saveAfterGrant = false; saveFace(); }
+                if (menuAfterGrant) { menuAfterGrant = false; openAdminMenu(); }
+                else if (saveAfterGrant) { saveAfterGrant = false; saveFace(); }
                 else if (removeAfterGrant) { const rid = removeAfterGrant; removeAfterGrant = null; removeFace(rid); }
             } catch (err) {
                 errEl.textContent = err.message;
@@ -2556,6 +2688,235 @@
             } finally {
                 btn.disabled = false; btn.textContent = 'Confirm & Continue';
             }
+        }
+
+
+        // ===== Kiosk screen helpers (12 Oct) =====
+        // Sound and voice: made on the page (no outside sound files), one switch.
+        let soundOn = (() => { try { return localStorage.getItem('botlens_sound') !== 'off'; } catch { return true; } })();
+        let voiceLang = (() => { try { return localStorage.getItem('botlens_voice') || 'en'; } catch { return 'en'; } })();
+        let audioCtx = null;
+        function unlockAudio() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch { /* no sound on this browser */ }
+        }
+        // Phones only allow sound after a tap: the first tap anywhere unlocks it.
+        document.addEventListener('pointerdown', unlockAudio, { once: true });
+        function tone(freq, start, dur, vol = 0.18) {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.type = 'sine'; o.frequency.value = freq;
+            g.gain.setValueAtTime(0.0001, audioCtx.currentTime + start);
+            g.gain.exponentialRampToValueAtTime(vol, audioCtx.currentTime + start + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + start + dur);
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(audioCtx.currentTime + start); o.stop(audioCtx.currentTime + start + dur + 0.05);
+        }
+        function beep(kind) {
+            if (!soundOn) return;
+            unlockAudio();
+            if (kind === 'ok') { tone(660, 0, 0.16); tone(990, 0.15, 0.22); }
+            else if (kind === 'bad') { tone(240, 0, 0.32, 0.22); }
+            else if (kind === 'soon') { tone(520, 0, 0.14, 0.12); }
+            else if (kind === 'prompt') { tone(880, 0, 0.09, 0.1); }
+        }
+        const PHRASES = {
+            en: { in: (n) => `Thank you ${n}. Punched in.`, out: (n) => `Thank you ${n}. Punched out.`, lunchIn: (n) => `${n}, lunch started.`, lunchOut: (n) => `Welcome back ${n}.`, left: 'Please turn your head to your left.', right: 'Please turn your head to your right.', soon: (n) => `${n}, already recorded.` },
+            hi: { in: (n) => `धन्यवाद ${n}, आपकी हाज़िरी लग गई।`, out: (n) => `धन्यवाद ${n}, आपका पंच आउट हो गया।`, lunchIn: (n) => `${n}, लंच शुरू।`, lunchOut: (n) => `${n}, वापसी दर्ज।`, left: 'कृपया सिर बाईं ओर घुमाइए।', right: 'कृपया सिर दाईं ओर घुमाइए।', soon: (n) => `${n}, पहले ही दर्ज है।` },
+            gu: { in: (n) => `આભાર ${n}, તમારી હાજરી નોંધાઈ ગઈ.`, out: (n) => `આભાર ${n}, પંચ આઉટ થઈ ગયું.`, lunchIn: (n) => `${n}, લંચ શરૂ.`, lunchOut: (n) => `${n}, પાછા આવ્યા.`, left: 'કૃપા કરીને માથું ડાબી બાજુ ફેરવો.', right: 'કૃપા કરીને માથું જમણી બાજુ ફેરવો.', soon: (n) => `${n}, પહેલેથી નોંધાયેલું છે.` },
+        };
+        const VOICE_TAG = { en: 'en-IN', hi: 'hi-IN', gu: 'gu-IN' };
+        function speak(key, name) {
+            if (!soundOn || voiceLang === 'off' || !('speechSynthesis' in window)) return;
+            const set = PHRASES[voiceLang] || PHRASES.en;
+            const p = set[key];
+            if (!p) return;
+            try {
+                window.speechSynthesis.cancel();
+                const u = new SpeechSynthesisUtterance(typeof p === 'function' ? p(name || '') : p);
+                u.lang = VOICE_TAG[voiceLang] || 'en-IN';
+                const v = window.speechSynthesis.getVoices().find((x) => x.lang && x.lang.toLowerCase().startsWith(u.lang.slice(0, 2).toLowerCase()));
+                if (v) u.voice = v;
+                u.rate = 1;
+                window.speechSynthesis.speak(u);
+            } catch { /* no voice: the beep and the screen still show it */ }
+        }
+        function updateSoundButtons() {
+            const b = document.getElementById('sound-btn');
+            if (b) {
+                b.innerHTML = (soundOn ? '🔊' : '🔇') + `<span class="lbl">${soundOn ? 'Sound' : 'Muted'}</span>`;
+                b.classList.toggle('off', !soundOn);
+                b.setAttribute('aria-label', soundOn ? 'Sound on. Tap to mute.' : 'Muted. Tap to turn sound on.');
+            }
+            const a = document.getElementById('admin-sound-btn');
+            if (a) a.textContent = soundOn ? '🔊 Sound on' : '🔇 Muted';
+        }
+        function toggleSound() {
+            soundOn = !soundOn;
+            try { localStorage.setItem('botlens_sound', soundOn ? 'on' : 'off'); } catch { }
+            if (!soundOn && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+            updateSoundButtons();
+            if (soundOn) { unlockAudio(); beep('prompt'); }
+        }
+        function setVoice(v) {
+            voiceLang = v;
+            try { localStorage.setItem('botlens_voice', v); } catch { }
+            if (v !== 'off') speak('in', 'Test');
+        }
+
+        // Clock and date (India time), every second.
+        function tickClock() {
+            const now = new Date();
+            const t = document.getElementById('kiosk-clock');
+            const d = document.getElementById('kiosk-date');
+            const small = window.innerWidth < 640;
+            if (t) t.textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', ...(small ? {} : { second: '2-digit' }), hour12: true, timeZone: 'Asia/Kolkata' });
+            if (d) d.textContent = now.toLocaleDateString('en-IN', small
+                ? { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }
+                : { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' });
+        }
+        function showKioskLabel() {
+            const s = getSession() || {};
+            const el = document.getElementById('kiosk-label');
+            if (el) el.textContent = [s.companyName, s.kioskName].filter(Boolean).join(' · ');
+            const fs = document.getElementById('fs-btn');
+            if (fs && !(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen)) fs.style.display = 'none';
+        }
+
+        // Everyone's registered photo (or their initials): never sent to an outside site.
+        let rosterById = new Map();
+        async function loadRoster() {
+            try {
+                const list = await lensApi('/employees');
+                if (Array.isArray(list)) rosterById = new Map(list.map((p) => [String(p._id), p]));
+            } catch { /* keep the last list */ }
+        }
+        const escHtml = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        function initials(name) {
+            return String(name || '?').trim().split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+        }
+        function avatarHtml(id, name, cls = '') {
+            const p = rosterById.get(String(id));
+            if (p && p.thumbnailUrl && /^https:\/\//.test(p.thumbnailUrl)) {
+                return `<img class="avatar ${cls}" src="${escHtml(p.thumbnailUrl)}" alt="" onerror="this.outerHTML='<div class=&quot;avatar ${cls}&quot;>${escHtml(initials(name))}</div>'">`;
+            }
+            return `<div class="avatar ${cls}">${escHtml(initials(name))}</div>`;
+        }
+
+        // The big result screen after a sighting, for 3 seconds (tap to close).
+        let resultTimer = null;
+        function hideResult() {
+            const r = document.getElementById('result-screen');
+            if (r) r.className = '';
+        }
+        function showResult(kind, title, name, msg, id) {
+            const r = document.getElementById('result-screen');
+            if (!r) return;
+            r.innerHTML = `${avatarHtml(id, name, 'lg')}<div class="big">${escHtml(title)}</div><div class="name">${escHtml(name)}</div><div class="msg">${escHtml(msg || '')}</div>`;
+            r.className = `show ${kind}`;
+            clearTimeout(resultTimer);
+            resultTimer = setTimeout(hideResult, kind === 'bad' ? 4000 : 3000);
+            const last = document.getElementById('last-result');
+            if (last) last.innerHTML = `${avatarHtml(id, name)}<div style="min-width:0;"><div class="what">${escHtml(name)} · ${escHtml(title)}</div><div class="when">${escHtml(msg || '')}</div></div>`;
+        }
+
+        // The head-turn step: a big moving arrow and a ring that runs down.
+        let cueState = { dir: null, started: 0, spoke: null };
+        const CUE_SECONDS = 10;
+        function setTurnCue(hint, name) {
+            const cue = document.getElementById('turn-cue');
+            const arrow = document.getElementById('turn-arrow');
+            const ring = document.getElementById('turn-ring');
+            if (!cue || !arrow || !ring) return;
+            if (hint === 'turn_left' || hint === 'turn_right') {
+                const dir = hint === 'turn_left' ? 'left' : 'right';
+                if (cueState.dir !== dir) {
+                    cueState = { dir, started: Date.now(), spoke: null };
+                }
+                if (cueState.spoke !== dir) { cueState.spoke = dir; beep('prompt'); speak(dir, name); }
+                // The camera picture is mirrored, so the person's left is the left of the screen.
+                arrow.textContent = dir === 'left' ? '←' : '→';
+                arrow.className = `arrow ${dir}`;
+                const left = Math.max(0, 1 - (Date.now() - cueState.started) / (CUE_SECONDS * 1000));
+                ring.style.strokeDashoffset = String(289 * (1 - left));
+                ring.style.stroke = left > 0.35 ? '#34d399' : '#f59e0b';
+                cue.className = 'show';
+            } else if (hint === 'turn_back') {
+                arrow.textContent = '✓';
+                arrow.className = 'arrow ok';
+                cue.className = 'show';
+            } else {
+                cue.className = '';
+                if (hint !== 'turn_back') cueState = { dir: null, started: 0, spoke: null };
+            }
+        }
+
+        // Admin settings (⚙): behind the BOTLens email and password.
+        let menuAfterGrant = false;
+        function renderAdminMenu() {
+            updateSoundButtons();
+            const v = document.getElementById('voice-select');
+            if (v) v.value = voiceLang;
+        }
+        function openAdminMenu() {
+            if (!hasGrant()) { menuAfterGrant = true; askForGrant(); return; }
+            renderAdminMenu();
+            document.getElementById('admin-menu').style.display = 'flex';
+        }
+        function closeAdminMenu() {
+            document.getElementById('admin-menu').style.display = 'none';
+        }
+
+        // Registration list: search, filters, counts and steps.
+        let peopleFilter = 'all';
+        function setPeopleFilter(f) {
+            peopleFilter = f;
+            document.querySelectorAll('.chip-btn[data-filter]').forEach((b) => b.classList.toggle('active', b.dataset.filter === f));
+            renderPeopleList();
+        }
+        function faceBadge(p) {
+            if (!p.hasFace) return '<span class="badge none">✗ Not registered</span>';
+            if (p.needsRescan) return `<span class="badge warn">Rescan: only ${p.angles || 1} angle${(p.angles || 1) === 1 ? '' : 's'}</span>`;
+            return `<span class="badge good">✓ Good${p.angles ? ` (${p.angles} angles)` : ''}</span>`;
+        }
+        function renderPeopleList() {
+            const box = document.getElementById('people-list');
+            if (!box) return;
+            const q = (document.getElementById('people-search')?.value || '').trim().toLowerCase();
+            const sel = document.getElementById('emp-select').value;
+            const shown = roster.filter((p) => (!q || (p.name || '').toLowerCase().includes(q))
+                && (peopleFilter === 'all' || (peopleFilter === 'none' ? !p.hasFace : (p.hasFace && p.needsRescan))));
+            box.innerHTML = shown.length ? '' : '<div style="padding:16px; color:var(--text-sub);">Nobody matches.</div>';
+            shown.forEach((p) => {
+                const row = document.createElement('div');
+                row.className = 'person-row' + (String(p._id) === sel ? ' sel' : '');
+                row.setAttribute('role', 'button');
+                row.tabIndex = 0;
+                row.innerHTML = `${avatarHtml(p._id, p.name)}<div class="who">${escHtml(p.name)}</div>${faceBadge(p)}`;
+                const pick = () => {
+                    const s2 = document.getElementById('emp-select');
+                    s2.value = String(p._id);
+                    onEmpSelectChange();
+                    renderPeopleList();
+                    document.getElementById('emp-details-fields').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                };
+                row.onclick = pick;
+                row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+                box.appendChild(row);
+            });
+            const total = roster.length, done = roster.filter((p) => p.hasFace).length, weak = roster.filter((p) => p.hasFace && p.needsRescan).length;
+            const c = document.getElementById('people-count');
+            if (c) c.textContent = `${done} of ${total} registered${weak ? ` · ${weak} need a rescan` : ''}`;
+            updateSteps();
+        }
+        function updateSteps() {
+            const sel = document.getElementById('emp-select')?.value;
+            const saved = document.getElementById('reg-saved-banner')?.style.display === 'block';
+            const set = (id, cls) => { const e = document.getElementById(id); if (e) e.className = 'step' + (cls ? ' ' + cls : ''); };
+            if (!sel) { set('step-1', saved ? 'done' : 'active'); set('step-2', ''); set('step-3', saved ? 'done' : ''); return; }
+            set('step-1', 'done'); set('step-2', 'active'); set('step-3', '');
         }
 
         // What to tell a person the kiosk cannot match yet.
@@ -2573,6 +2934,8 @@
         function setLiveGuide(dets) {
             const g = document.getElementById('live-guide');
             if (!g) return;
+            const ch = dets.find(x => x.challenge);
+            setTurnCue(ch ? ch.hint : null, ch ? ch.name : '');
             let text = 'Stand in front of the camera';
             if (dets.length) {
                 const d = dets.find(x => x.challenge) || dets.find(x => x.employeeId) || dets[0];
@@ -2597,29 +2960,29 @@
         const ACTION_TITLES = { 'punch-in': 'PUNCHED IN', 'punch-out': 'PUNCHED OUT', 'lunch-in': 'LUNCH STARTED', 'lunch-out': 'BACK FROM LUNCH' };
         function showSighting(ev) {
             const who = ev.employee?.name || ev.name || '';
+            const id = ev.employee?._id || ev.employeeId;
             if (ev.recorded && ev.action) {
-                document.getElementById('punch-sound').play().catch(() => { });
-                const alertEl = document.getElementById('punch-alert');
-                makeDismissable(alertEl, hidePunchAlert);
-                document.getElementById('alert-title').textContent = ACTION_TITLES[ev.action] || 'RECORDED';
-                document.getElementById('alert-msg').textContent = `${who} · ${ev.message || ''}`;
-                alertEl.style.display = 'block';
-                clearTimeout(showSighting.t);
-                showSighting.t = setTimeout(() => { alertEl.style.display = 'none'; }, 4000);
-                toast(`${who}: ${ev.message}`);
+                const kind = { 'punch-in': 'in', 'punch-out': 'out', 'lunch-in': 'lunch', 'lunch-out': 'in' }[ev.action] || 'in';
+                showResult(kind, ACTION_TITLES[ev.action] || 'RECORDED', who, ev.message || '', id);
+                beep('ok');
+                speak({ 'punch-in': 'in', 'punch-out': 'out', 'lunch-in': 'lunchIn', 'lunch-out': 'lunchOut' }[ev.action] || 'in', who);
                 startLive();
             } else if (ev.offline) {
-                toast(`${who}: ${ev.message}`, true);
+                showResult('soon', 'SAVED', who, ev.message || 'It will be sent when the connection is back.', id);
+                beep('soon');
             } else if (ev.recorded) {
-                toast(`${who}: ${ev.message}`);
+                showResult('in', 'RECORDED', who, ev.message || '', id);
+                beep('ok');
                 startLive();
             } else if (ev.reason === 'refused') {
-                toast(`${who}: ${ev.message}`, true);
+                showResult('bad', 'NOT RECORDED', who, ev.message || '', id);
+                beep('bad');
             } else if (ev.reason === 'near_punch' || ev.reason === 'debounced') {
-                // Too soon after their last punch (phone, machine or this camera): say when it was
-                // and when the next one counts. Shown once: the kiosk waits retryAfterSec before
-                // sending this person again.
-                toast(`${who}: ${ev.message}`);
+                // Too soon after their last punch (phone, machine or this camera): when it was,
+                // and when the next one counts. Shown once: the kiosk waits before sending them again.
+                showResult('soon', 'ALREADY DONE', who, ev.message || '', id);
+                beep('soon');
+                speak('soon', who);
             }
             // 'duplicate': the same sighting sent twice, nothing to say.
         }
@@ -2709,24 +3072,27 @@
             const latest = new Map(); // newest meaningful sighting per person
             rows.forEach(r => { if (r.action && !latest.has(r.employeeId)) latest.set(r.employeeId, r); });
             g.innerHTML = '';
+            let onDuty = 0;
             latest.forEach((r) => {
                 if (!IS_IN[r.action]) return;
+                onDuty++;
                 const d = document.createElement('div');
-                d.className = 'card pulse';
-                d.innerHTML = `<img src="https://ui-avatars.com/api/?name=${encodeURIComponent(r.name)}&background=9d174d&color=fff"><br><strong>${esc(r.name)}</strong><br><small style="color:#00ff00;">${esc(ACTION_WORDS[r.action]).toUpperCase()}</small>`;
+                d.className = 'duty-chip';
+                d.innerHTML = `${avatarHtml(r.employeeId, r.name)}<span>${esc(r.name)}</span>`;
                 g.appendChild(d);
             });
+            if (!onDuty) g.innerHTML = '<span style="color:var(--text-sub); font-size:0.9rem;">Nobody yet.</span>';
 
             const logList = document.getElementById('recent-log-list');
             if (logList) {
                 logList.innerHTML = rows.length ? '' : '<div style="text-align:center; padding:20px; opacity:0.5;">No face punches today yet.</div>';
                 rows.slice(0, 15).forEach(r => {
                     const li = document.createElement('div');
-                    li.style = "padding:10px; border-bottom:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; font-size:0.8rem;";
+                    li.className = 'recent-row';
                     const label = r.repeat ? 'Seen again' : (ACTION_WORDS[r.action] || 'Seen');
-                    const color = r.repeat || !r.action ? '#9ca3af' : (IS_IN[r.action] ? '#00ff00' : '#ff4444');
-                    const time = new Date(r.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-                    li.innerHTML = `<span><strong>${esc(r.name)}</strong></span><span style="color:${color}; font-weight:700;">${esc(label)}</span><span style="opacity:0.6;">${time}</span>`;
+                    const color = r.repeat || !r.action ? '#9ca3af' : (IS_IN[r.action] ? '#34d399' : '#f87171');
+                    const time = new Date(r.at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+                    li.innerHTML = `${avatarHtml(r.employeeId, r.name)}<span class="who">${esc(r.name)}</span><span style="color:${color}; font-weight:700;">${esc(label)}</span><span style="opacity:0.6;">${time}</span>`;
                     logList.appendChild(li);
                 });
             }
@@ -2762,6 +3128,7 @@
                 const s = getSession();
                 if (s && (s.kioskName !== me.kiosk?.name || s.companyName !== me.company?.name)) {
                     setSession({ ...s, kioskName: me.kiosk?.name, companyName: me.company?.name });
+                    showKioskLabel();
                 }
             } catch (err) {
                 // 401 / frozen / subscription are handled in lensApi; a network
@@ -2770,6 +3137,12 @@
         }
 
         function initApp() {
+            tickClock();
+            setInterval(tickClock, 1000);
+            showKioskLabel();
+            updateSoundButtons();
+            loadRoster().then(startLive);
+            setInterval(loadRoster, 5 * 60 * 1000);
             setInterval(startLive, 5000);
             startLocalCam('local-v');
             startLive();
