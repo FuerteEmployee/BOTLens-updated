@@ -1607,10 +1607,10 @@
             <div class="form-group" style="margin-top:16px;">
                 <label for="voice-select">Spoken confirmation</label>
                 <select id="voice-select" class="inp" onchange="setVoice(this.value)">
+                    <option value="off">Off (beep only)</option>
                     <option value="en">English</option>
                     <option value="hi">हिंदी (Hindi)</option>
                     <option value="gu">ગુજરાતી (Gujarati)</option>
-                    <option value="off">Off (beep only)</option>
                 </select>
                 <p style="color:var(--text-sub); font-size:0.8rem; margin-top:6px;">Uses the tablet's own voices. If a language has no voice installed, the tablet may read it in English or stay silent.</p>
             </div>
@@ -2694,7 +2694,8 @@
         // ===== Kiosk screen helpers (12 Oct) =====
         // Sound and voice: made on the page (no outside sound files), one switch.
         let soundOn = (() => { try { return localStorage.getItem('botlens_sound') !== 'off'; } catch { return true; } })();
-        let voiceLang = (() => { try { return localStorage.getItem('botlens_voice') || 'en'; } catch { return 'en'; } })();
+        // Spoken words are off unless an admin picks a language (owner, 13 Oct); beeps follow the Sound button.
+        let voiceLang = (() => { try { return localStorage.getItem('botlens_voice2') || 'off'; } catch { return 'off'; } })();
         let audioCtx = null;
         function unlockAudio() {
             try {
@@ -2762,7 +2763,7 @@
         }
         function setVoice(v) {
             voiceLang = v;
-            try { localStorage.setItem('botlens_voice', v); } catch { }
+            try { localStorage.setItem('botlens_voice2', v); } catch { }
             if (v !== 'off') speak('in', 'Test');
         }
 
