@@ -32,6 +32,12 @@ ME_TTL = 60            # re-ask the backend who a key is, at most once a minute
 ME_STALE_OK = 600      # keep working on the last answer this long if the backend is down
 SEEN_FRAMES = 2        # a face must match in this many frames ...
 SEEN_WINDOW = 3.0      # ... within this many seconds before it counts as a sighting
+# A sighting "on its way" this long is given up. It covers the head-turn check
+# (10 s) plus the backend call; without it, a check started on a kiosk whose
+# tab was then closed was never finished or timed out (a check only times out
+# when that kiosk sends its next frame), and the person was ignored on EVERY
+# kiosk of the company until the kiosk server restarted (Bharat, 13 Oct).
+INFLIGHT_STALE = float(os.getenv("LENS_INFLIGHT_STALE_SECONDS", "30"))
 
 
 class BackendError(Exception):
@@ -148,11 +154,15 @@ def note_match(company, emp_id, repeat_seconds):
     k = (str(company), str(emp_id))
     now = time.time()
     with _seen_lock:
-        s = _seen.setdefault(k, {"hits": [], "inflight": False, "next_ok": 0.0, "last": None})
+        s = _seen.setdefault(k, {"hits": [], "inflight": False, "inflight_at": 0.0, "next_ok": 0.0, "last": None})
         s["hits"] = [t for t in s["hits"] if now - t <= SEEN_WINDOW] + [now]
+        if s["inflight"] and now - s.get("inflight_at", 0.0) > INFLIGHT_STALE:
+            s["inflight"] = False   # abandoned (the kiosk that started it went away)
+            s["next_ok"] = 0.0
         if s["inflight"] or now < s["next_ok"] or len(s["hits"]) < SEEN_FRAMES:
             return False
         s["inflight"] = True
+        s["inflight_at"] = now
         s["next_ok"] = now + max(30, repeat_seconds or 120)
         return True
 
