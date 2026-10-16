@@ -9,6 +9,7 @@ face maths.
 """
 import base64
 import os
+import time
 from typing import List
 
 from dotenv import load_dotenv
@@ -137,6 +138,7 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
     primary = max(rows, key=lambda r: float(r[2]) * float(r[3])) if rows else None
     challenge, expired = liveness.current(kiosk)
     if expired:
+        print(liveness.summary(expired, "timed_out"), flush=True)
         hub.release(company, expired["emp_id"])
     if challenge:
         # Follow the person being checked, not whoever is biggest now.
@@ -161,8 +163,14 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
 
         # Someone else, clearly recognised, now stands where the checked person
         # stood: they left. Drop their check so this person can be served.
-        if challenge and row is primary and emp_id and emp_id != challenge["emp_id"] \
+        # Only on a straight-on face: a face turned for the check is matched
+        # less surely, and a look-alike match there used to cancel the check
+        # and start it again, so the person seemed stuck.
+        m_now = liveness.measures(row) if challenge and row is primary else None
+        straight = bool(m_now) and abs(m_now["rx"] - challenge["base"]["rx"]) <= 0.05
+        if challenge and row is primary and emp_id and emp_id != challenge["emp_id"] and straight \
                 and not (vec is not None and face.is_same_person(vec, known, challenge["emp_id"])):
+            print(liveness.summary(challenge, "someone_else"), flush=True)
             liveness.clear(kiosk)
             hub.release(company, challenge["emp_id"])
             challenge = None
@@ -172,17 +180,22 @@ def process_client_frame(request: Request, photo: UploadFile = File(...)):
             det["name"] = challenge["name"]
             det["challenge"] = challenge["direction"]
             if challenge["stage"] == "turn":
-                if liveness.turned_enough(challenge, row):
+                state, progress = liveness.turn_state(challenge, row)
+                if state == "ok":
                     challenge["stage"] = "back"
+                    challenge["turned_at"] = time.time()
                     det["hint"] = "turn_back"
                 else:
                     det["hint"] = "turn_" + challenge["direction"]
+                    # how far along the turn is, shown by the moving head
+                    det["turn"] = {"state": state, "progress": round(progress, 2)}
                 detections.append(det)
                 continue
             # stage "back": straight on again, and still the same person
             if emp_id != challenge["emp_id"] and vec is not None and face.is_same_person(vec, known, challenge["emp_id"]):
                 emp_id, name = challenge["emp_id"], challenge["name"]
             if emp_id == challenge["emp_id"]:
+                print(liveness.summary(challenge, "passed"), flush=True)
                 liveness.clear(kiosk)
                 result = hub.send_sighting(key, company, emp_id, challenge["score"])
                 events.append({"employeeId": emp_id, "name": name, **result})

@@ -1222,6 +1222,10 @@
         #turn-cue .arrow.left { left:-6%; animation: nudgeLeft 0.9s ease-in-out infinite; }
         #turn-cue .arrow.right { right:-6%; animation: nudgeRight 0.9s ease-in-out infinite; }
         #turn-cue .arrow.ok { display:none; }
+        /* Turned too far: the arrow points back the other way, amber, and the head stops turning. */
+        #turn-cue .arrow.back-a-bit { color:#f59e0b; }
+        #turn-cue.too-far #cue-face, #turn-cue.too-far #cue-skull { animation: none; }
+        #turn-cue #turn-ring { transition: stroke-dashoffset 0.25s ease-out, stroke 0.2s; }
         #turn-cue.left #cue-face { animation: faceLeft 1.6s ease-in-out infinite; }
         #turn-cue.right #cue-face { animation: faceRight 1.6s ease-in-out infinite; }
         #turn-cue.left #cue-skull { animation: skullTurn 1.6s ease-in-out infinite; }
@@ -2853,10 +2857,11 @@
             if (last) last.innerHTML = `${avatarHtml(id, name)}<div style="min-width:0;"><div class="what">${escHtml(name)} · ${escHtml(title)}</div><div class="when">${escHtml(msg || '')}</div></div>`;
         }
 
-        // The head-turn step: a big moving arrow and a ring that runs down.
-        let cueState = { dir: null, started: 0, spoke: null };
-        const CUE_SECONDS = 10;
-        function setTurnCue(hint, name) {
+        // The head-turn step: a big moving arrow, and a ring that fills as the
+        // person turns (the server measures the turn on every frame). Turned too
+        // far: the ring goes amber and the arrow points back the other way.
+        let cueState = { dir: null, started: 0, spoke: null, shown: 0 };
+        function setTurnCue(hint, name, turn) {
             const cue = document.getElementById('turn-cue');
             const arrow = document.getElementById('turn-arrow');
             const ring = document.getElementById('turn-ring');
@@ -2864,16 +2869,21 @@
             if (hint === 'turn_left' || hint === 'turn_right') {
                 const dir = hint === 'turn_left' ? 'left' : 'right';
                 if (cueState.dir !== dir) {
-                    cueState = { dir, started: Date.now(), spoke: null };
+                    cueState = { dir, started: Date.now(), spoke: null, shown: 0 };
                 }
                 if (cueState.spoke !== dir) { cueState.spoke = dir; beep('prompt'); speak(dir, name); }
+                const state = turn && turn.state;
+                const tooFar = state === 'too_far';
                 // The camera picture is mirrored, so the person's left is the left of the screen.
-                arrow.textContent = dir === 'left' ? '←' : '→';
-                arrow.className = `arrow ${dir}`;
-                const left = Math.max(0, 1 - (Date.now() - cueState.started) / (CUE_SECONDS * 1000));
-                ring.style.strokeDashoffset = String(289 * (1 - left));
-                ring.style.stroke = left > 0.35 ? '#34d399' : '#f59e0b';
-                cue.className = `show ${dir}`;
+                const showDir = tooFar ? (dir === 'left' ? 'right' : 'left') : dir;
+                arrow.textContent = showDir === 'left' ? '←' : '→';
+                arrow.className = `arrow ${showDir}${tooFar ? ' back-a-bit' : ''}`;
+                // Never let the ring jump backwards on one noisy frame.
+                const p = Math.max(0, Math.min(1, Number(turn && turn.progress) || 0));
+                cueState.shown = tooFar ? 1 : Math.max(p, cueState.shown * 0.85);
+                ring.style.strokeDashoffset = String(289 * (1 - cueState.shown));
+                ring.style.stroke = tooFar ? '#f59e0b' : '#34d399';
+                cue.className = `show ${dir}${tooFar ? ' too-far' : ''}`;
             } else if (hint === 'turn_back') {
                 // Turned: now face the camera again. The head faces front and pulses.
                 arrow.textContent = '';
@@ -2883,7 +2893,7 @@
                 cue.className = 'show back';
             } else {
                 cue.className = '';
-                if (hint !== 'turn_back') cueState = { dir: null, started: 0, spoke: null };
+                if (hint !== 'turn_back') cueState = { dir: null, started: 0, spoke: null, shown: 0 };
             }
         }
 
@@ -2969,7 +2979,7 @@
             const g = document.getElementById('live-guide');
             if (!g) return;
             const ch = dets.find(x => x.challenge);
-            setTurnCue(ch ? ch.hint : null, ch ? ch.name : '');
+            setTurnCue(ch ? ch.hint : null, ch ? ch.name : '', ch ? ch.turn : null);
             let text = 'Stand in front of the camera';
             if (dets.length) {
                 const d = dets.find(x => x.challenge) || dets.find(x => x.employeeId) || dets[0];
